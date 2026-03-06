@@ -1,0 +1,16 @@
+[package]
+name = "superzed_agent"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+license = "GPL-3.0-or-later"
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+superzed_model.workspace = true
+task.workspace = true

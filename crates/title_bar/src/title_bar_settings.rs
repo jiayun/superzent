@@ -1,5 +1,6 @@
 use settings::{RegisterSetting, Settings, SettingsContent};
 
+#[allow(dead_code)]
 #[derive(Copy, Clone, Debug, RegisterSetting)]
 pub struct TitleBarSettings {
     pub show_branch_icon: bool,

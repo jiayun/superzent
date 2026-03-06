@@ -26,7 +26,6 @@ use editor::{Editor, MultiBuffer};
 use extension_host::ExtensionStore;
 use feature_flags::{FeatureFlagAppExt as _, PanicFeatureFlag};
 use fs::Fs;
-use futures::FutureExt as _;
 use futures::future::Either;
 use futures::{StreamExt, channel::mpsc, select_biased};
 use git_ui::commit_view::CommitViewToolbar;
@@ -68,7 +67,6 @@ use settings::{
     initial_local_debug_tasks_content, initial_project_settings_content, initial_tasks_content,
     update_settings_file,
 };
-use sidebar::Sidebar;
 use std::time::Duration;
 use std::{
     borrow::Cow,
@@ -76,6 +74,7 @@ use std::{
     sync::Arc,
     sync::atomic::{self, AtomicBool},
 };
+use superzed_ui::{SuperzedRightSidebar, SuperzedSidebar};
 use terminal_view::terminal_panel::{self, TerminalPanel};
 use theme::{ActiveTheme, GlobalTheme, SystemAppearance, ThemeRegistry, ThemeSettings};
 use ui::{PopoverMenuHandle, prelude::*};
@@ -392,8 +391,9 @@ pub fn initialize_workspace(
         cx.defer(move |cx| {
             window_handle
                 .update(cx, |_, window, cx| {
-                    let sidebar =
-                        cx.new(|cx| Sidebar::new(multi_workspace_handle.clone(), window, cx));
+                    let sidebar = cx.new(|cx| {
+                        SuperzedSidebar::new(multi_workspace_handle.clone(), window, cx)
+                    });
                     multi_workspace_handle.update(cx, |multi_workspace, cx| {
                         multi_workspace.register_sidebar(sidebar, window, cx);
                     });
@@ -620,7 +620,7 @@ fn show_software_emulation_warning_if_needed(
 }
 
 fn initialize_panels(
-    prompt_builder: Arc<PromptBuilder>,
+    _prompt_builder: Arc<PromptBuilder>,
     window: &mut Window,
     cx: &mut Context<Workspace>,
 ) -> Task<anyhow::Result<()>> {
@@ -629,44 +629,47 @@ fn initialize_panels(
         let outline_panel = OutlinePanel::load(workspace_handle.clone(), cx.clone());
         let terminal_panel = TerminalPanel::load(workspace_handle.clone(), cx.clone());
         let git_panel = GitPanel::load(workspace_handle.clone(), cx.clone());
-        let channels_panel =
-            collab_ui::collab_panel::CollabPanel::load(workspace_handle.clone(), cx.clone());
-        let notification_panel = collab_ui::notification_panel::NotificationPanel::load(
-            workspace_handle.clone(),
-            cx.clone(),
-        );
         let debug_panel = DebugPanel::load(workspace_handle.clone(), cx);
 
-        async fn add_panel_when_ready(
-            panel_task: impl Future<Output = anyhow::Result<Entity<impl workspace::Panel>>> + 'static,
-            workspace_handle: WeakEntity<Workspace>,
-            mut cx: gpui::AsyncWindowContext,
-        ) {
-            if let Some(panel) = panel_task.await.context("failed to load panel").log_err()
-            {
-                workspace_handle
-                    .update_in(&mut cx, |workspace, window, cx| {
-                        workspace.add_panel(panel, window, cx);
-                    })
-                    .log_err();
-            }
-        }
+        let (project_panel, outline_panel, terminal_panel, git_panel, debug_panel) =
+            futures::try_join!(
+                project_panel,
+                outline_panel,
+                terminal_panel,
+                git_panel,
+                debug_panel,
+            )?;
 
-        futures::join!(
-            add_panel_when_ready(project_panel, workspace_handle.clone(), cx.clone()),
-            add_panel_when_ready(outline_panel, workspace_handle.clone(), cx.clone()),
-            add_panel_when_ready(terminal_panel, workspace_handle.clone(), cx.clone()),
-            add_panel_when_ready(git_panel, workspace_handle.clone(), cx.clone()),
-            add_panel_when_ready(channels_panel, workspace_handle.clone(), cx.clone()),
-            add_panel_when_ready(notification_panel, workspace_handle.clone(), cx.clone()),
-            add_panel_when_ready(debug_panel, workspace_handle.clone(), cx.clone()),
-            initialize_agent_panel(workspace_handle, prompt_builder, cx.clone()).map(|r| r.log_err()),
-        );
+        let right_sidebar = SuperzedRightSidebar::load(
+            workspace_handle.clone(),
+            project_panel.clone(),
+            git_panel.clone(),
+            cx.clone(),
+        )?;
+
+        workspace_handle
+            .update_in(cx, |workspace, window, cx| {
+                workspace.add_panel(project_panel, window, cx);
+                workspace.add_panel(outline_panel, window, cx);
+                workspace.add_panel(terminal_panel, window, cx);
+                workspace.add_panel(git_panel, window, cx);
+                workspace.add_panel(debug_panel, window, cx);
+                workspace.add_panel(right_sidebar, window, cx);
+
+                // Superzed owns the left shell and the right details sidebar.
+                // Zed's left/bottom docks add duplicate chrome for this product surface.
+                workspace.close_all_docks(window, cx);
+                let _ = workspace.focus_panel::<SuperzedRightSidebar>(window, cx);
+                let active_pane = workspace.active_pane().clone();
+                active_pane.update(cx, |pane, cx| window.focus(&pane.focus_handle(cx), cx));
+            })
+            .log_err();
 
         anyhow::Ok(())
     })
 }
 
+#[allow(dead_code)]
 fn setup_or_teardown_ai_panel<P: Panel>(
     workspace: &mut Workspace,
     window: &mut Window,
@@ -703,6 +706,7 @@ fn setup_or_teardown_ai_panel<P: Panel>(
     }
 }
 
+#[allow(dead_code)]
 async fn initialize_agent_panel(
     workspace_handle: WeakEntity<Workspace>,
     prompt_builder: Arc<PromptBuilder>,
@@ -1015,24 +1019,6 @@ fn register_actions(
              window: &mut Window,
              cx: &mut Context<Workspace>| {
                 workspace.toggle_panel_focus::<OutlinePanel>(window, cx);
-            },
-        )
-        .register_action(
-            |workspace: &mut Workspace,
-             _: &collab_ui::collab_panel::ToggleFocus,
-             window: &mut Window,
-             cx: &mut Context<Workspace>| {
-                workspace.toggle_panel_focus::<collab_ui::collab_panel::CollabPanel>(window, cx);
-            },
-        )
-        .register_action(
-            |workspace: &mut Workspace,
-             _: &collab_ui::notification_panel::ToggleFocus,
-             window: &mut Window,
-             cx: &mut Context<Workspace>| {
-                workspace.toggle_panel_focus::<collab_ui::notification_panel::NotificationPanel>(
-                    window, cx,
-                );
             },
         )
         .register_action(

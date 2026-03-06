@@ -1,0 +1,27 @@
+[package]
+name = "superzed_ui"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+license = "GPL-3.0-or-later"
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+git_ui.workspace = true
+gpui.workspace = true
+project.workspace = true
+project_panel.workspace = true
+superzed_agent.workspace = true
+superzed_git.workspace = true
+superzed_model.workspace = true
+terminal_view.workspace = true
+theme.workspace = true
+ui.workspace = true
+util.workspace = true
+workspace.workspace = true

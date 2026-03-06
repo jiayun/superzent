@@ -1,4 +1,5 @@
 mod application_menu;
+#[allow(dead_code)]
 pub mod collab;
 mod onboarding_banner;
 mod plan_chip;
@@ -24,7 +25,6 @@ use auto_update::AutoUpdateStatus;
 use call::ActiveCall;
 use client::{Client, UserStore, zed_urls};
 use cloud_api_types::Plan;
-use feature_flags::{AgentV2FeatureFlag, FeatureFlagAppExt};
 use gpui::{
     Action, AnyElement, App, Context, Corner, Element, Empty, Entity, Focusable,
     InteractiveElement, IntoElement, MouseButton, ParentElement, Render,
@@ -32,7 +32,7 @@ use gpui::{
 };
 use onboarding_banner::OnboardingBanner;
 use project::{
-    DisableAiSettings, Project, git_store::GitStoreEvent, trusted_worktrees::TrustedWorktrees,
+    Project, git_store::GitStoreEvent, trusted_worktrees::TrustedWorktrees,
 };
 use remote::RemoteConnectionOptions;
 use settings::Settings;
@@ -51,6 +51,7 @@ use workspace::{
     notifications::NotifyResultExt,
 };
 use zed_actions::OpenRemote;
+use superzed_ui;
 
 pub use onboarding_banner::restore_banner;
 
@@ -153,8 +154,10 @@ pub struct TitleBar {
     workspace: WeakEntity<Workspace>,
     application_menu: Option<Entity<ApplicationMenu>>,
     _subscriptions: Vec<Subscription>,
+    #[allow(dead_code)]
     banner: Entity<OnboardingBanner>,
     update_version: Entity<UpdateVersion>,
+    #[allow(dead_code)]
     screen_share_popover_handle: PopoverMenuHandle<ContextMenu>,
 }
 
@@ -168,28 +171,24 @@ impl Render for TitleBar {
 
         children.push(
             h_flex()
-                .gap_0p5()
+                .gap_1()
+                .items_center()
                 .map(|title_bar| {
-                    let mut render_project_items = title_bar_settings.show_branch_name
-                        || title_bar_settings.show_project_items;
                     title_bar
                         .children(self.render_workspace_sidebar_toggle(window, cx))
+                        .child(
+                            Button::new("superzed-header-brand", "Superzed")
+                                .style(ButtonStyle::Tinted(TintColor::Accent))
+                                .icon(IconName::FileTree)
+                                .label_size(LabelSize::Small),
+                        )
                         .when_some(
                             self.application_menu.clone().filter(|_| !show_menus),
-                            |title_bar, menu| {
-                                render_project_items &=
-                                    !menu.update(cx, |menu, cx| menu.all_menus_shown(cx));
-                                title_bar.child(menu)
-                            },
+                            |title_bar, menu| title_bar.child(menu),
                         )
-                        .children(self.render_restricted_mode(cx))
-                        .when(render_project_items, |title_bar| {
+                        .when(title_bar_settings.show_project_items, |title_bar| {
                             title_bar
-                                .when(title_bar_settings.show_project_items, |title_bar| {
-                                    title_bar
-                                        .children(self.render_project_host(cx))
-                                        .child(self.render_project_name(cx))
-                                })
+                                .child(self.render_project_name(cx))
                                 .when(title_bar_settings.show_branch_name, |title_bar| {
                                     title_bar.children(self.render_project_branch(cx))
                                 })
@@ -199,40 +198,40 @@ impl Render for TitleBar {
                 .into_any_element(),
         );
 
-        children.push(self.render_collaborator_list(window, cx).into_any_element());
-
-        if title_bar_settings.show_onboarding_banner {
-            children.push(self.banner.clone().into_any_element())
-        }
-
-        let status = self.client.status();
-        let status = &*status.borrow();
-        let user = self.user_store.read(cx).current_user();
-
-        let signed_in = user.is_some();
-
         children.push(
             h_flex()
-                .map(|this| {
-                    if signed_in {
-                        this.pr_1p5()
-                    } else {
-                        this.pr_1()
-                    }
-                })
+                .pr_1()
                 .gap_1()
+                .items_center()
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .children(self.render_call_controls(window, cx))
-                .children(self.render_connection_status(status, cx))
-                .child(self.update_version.clone())
-                .when(
-                    user.is_none() && TitleBarSettings::get_global(cx).show_sign_in,
-                    |this| this.child(self.render_sign_in_button(cx)),
+                .child(
+                    Button::new("superzed-header-add-project", "Add Repository")
+                        .style(ButtonStyle::Subtle)
+                        .icon(IconName::FolderOpen)
+                        .label_size(LabelSize::Small)
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(superzed_ui::AddProject), cx);
+                        }),
                 )
-                .child(self.render_organization_menu_button(cx))
-                .when(TitleBarSettings::get_global(cx).show_user_menu, |this| {
-                    this.child(self.render_user_menu_button(cx))
-                })
+                .child(
+                    Button::new("superzed-header-new-workspace", "New Workspace")
+                        .style(ButtonStyle::Subtle)
+                        .icon(IconName::Plus)
+                        .label_size(LabelSize::Small)
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(superzed_ui::NewWorkspace), cx);
+                        }),
+                )
+                .child(
+                    Button::new("superzed-header-changes", "Changes")
+                        .style(ButtonStyle::Subtle)
+                        .icon(IconName::GitBranchAlt)
+                        .label_size(LabelSize::Small)
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(superzed_ui::RevealChanges), cx);
+                        }),
+                )
+                .child(self.update_version.clone())
                 .into_any_element(),
         );
 
@@ -688,10 +687,6 @@ impl TitleBar {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        if !cx.has_flag::<AgentV2FeatureFlag>() || DisableAiSettings::get_global(cx).disable_ai {
-            return None;
-        }
-
         let is_sidebar_open = self.platform_titlebar.read(cx).is_workspace_sidebar_open();
 
         if is_sidebar_open {
@@ -709,7 +704,7 @@ impl TitleBar {
                         .indicator_border_color(Some(cx.theme().colors().title_bar_background))
                 })
                 .tooltip(move |_, cx| {
-                    Tooltip::for_action("Open Threads Sidebar", &ToggleWorkspaceSidebar, cx)
+                    Tooltip::for_action("Open Workspace Sidebar", &ToggleWorkspaceSidebar, cx)
                 })
                 .on_click(|_, window, cx| {
                     window.dispatch_action(ToggleWorkspaceSidebar.boxed_clone(), cx);
@@ -731,7 +726,7 @@ impl TitleBar {
         let display_name = if let Some(ref name) = name {
             util::truncate_and_trailoff(name, MAX_PROJECT_NAME_LENGTH)
         } else {
-            "Open Recent Project".to_string()
+            "No Repository".to_string()
         };
 
         let focus_handle = workspace
@@ -875,6 +870,7 @@ impl TitleBar {
         cx.notify();
     }
 
+    #[allow(dead_code)]
     fn share_project(&mut self, cx: &mut Context<Self>) {
         let active_call = ActiveCall::global(cx);
         let project = self.project.clone();
@@ -883,6 +879,7 @@ impl TitleBar {
             .detach_and_log_err(cx);
     }
 
+    #[allow(dead_code)]
     fn unshare_project(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         let active_call = ActiveCall::global(cx);
         let project = self.project.clone();
@@ -891,6 +888,7 @@ impl TitleBar {
             .log_err();
     }
 
+    #[allow(dead_code)]
     fn render_connection_status(
         &self,
         status: &client::Status,
@@ -939,6 +937,7 @@ impl TitleBar {
         }
     }
 
+    #[allow(dead_code)]
     pub fn render_sign_in_button(&mut self, _: &mut Context<Self>) -> Button {
         let client = self.client.clone();
         let workspace = self.workspace.clone();
@@ -958,6 +957,7 @@ impl TitleBar {
             })
     }
 
+    #[allow(dead_code)]
     pub fn render_organization_menu_button(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let Some(organization) = self.user_store.read(cx).current_organization() else {
             return Empty.into_any_element();
@@ -1038,6 +1038,7 @@ impl TitleBar {
             .into_any_element()
     }
 
+    #[allow(dead_code)]
     pub fn render_user_menu_button(&mut self, cx: &mut Context<Self>) -> impl Element {
         let show_update_badge = self.update_version.read(cx).show_update_in_menu_bar();
 

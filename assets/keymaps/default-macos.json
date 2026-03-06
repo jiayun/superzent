@@ -741,8 +741,8 @@
     "use_key_equivalents": true,
     "bindings": {
       "cmd-n": "multi_workspace::NewWorkspaceInWindow",
-      "left": "agents_sidebar::CollapseSelectedEntry",
-      "right": "agents_sidebar::ExpandSelectedEntry",
+      "left": "superzed::CollapseWorkspaceSection",
+      "right": "superzed::ExpandWorkspaceSection",
       "enter": "menu::Confirm",
     },
   },

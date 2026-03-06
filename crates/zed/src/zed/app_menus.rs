@@ -1,8 +1,7 @@
-use collab_ui::collab_panel;
 use gpui::{App, Menu, MenuItem, OsAction};
 use release_channel::ReleaseChannel;
-use terminal_view::terminal_panel;
-use zed_actions::{debug_panel, dev};
+use superzed_ui;
+use zed_actions::dev;
 
 pub fn app_menus(cx: &mut App) -> Vec<Menu> {
     use zed_actions::Quit;
@@ -39,11 +38,9 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
             ],
         }),
         MenuItem::separator(),
-        MenuItem::action("Project Panel", zed_actions::project_panel::ToggleFocus),
-        MenuItem::action("Outline Panel", outline_panel::ToggleFocus),
-        MenuItem::action("Collab Panel", collab_panel::ToggleFocus),
-        MenuItem::action("Terminal Panel", terminal_panel::ToggleFocus),
-        MenuItem::action("Debugger Panel", debug_panel::ToggleFocus),
+        MenuItem::action("Workspace Sidebar", workspace::ToggleWorkspaceSidebar),
+        MenuItem::action("Workspace Details", superzed_ui::ToggleRightSidebar),
+        MenuItem::action("Reveal Changes", superzed_ui::RevealChanges),
         MenuItem::separator(),
         MenuItem::action("Diagnostics", diagnostics::Deploy),
         MenuItem::separator(),
@@ -59,9 +56,9 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
 
     vec![
         Menu {
-            name: "Zed".into(),
+            name: "Superzed".into(),
             items: vec![
-                MenuItem::action("About Zed", zed_actions::About),
+                MenuItem::action("About Superzed", zed_actions::About),
                 MenuItem::action("Check for Updates", auto_update::Check),
                 MenuItem::separator(),
                 MenuItem::submenu(Menu {
@@ -102,21 +99,23 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
                 MenuItem::action("Install CLI", install_cli::InstallCliBinary),
                 MenuItem::separator(),
                 #[cfg(target_os = "macos")]
-                MenuItem::action("Hide Zed", super::Hide),
+                MenuItem::action("Hide Superzed", super::Hide),
                 #[cfg(target_os = "macos")]
                 MenuItem::action("Hide Others", super::HideOthers),
                 #[cfg(target_os = "macos")]
                 MenuItem::action("Show All", super::ShowAll),
                 MenuItem::separator(),
-                MenuItem::action("Quit Zed", Quit),
+                MenuItem::action("Quit Superzed", Quit),
             ],
         },
         Menu {
             name: "File".into(),
             items: vec![
-                MenuItem::action("New", workspace::NewFile),
+                MenuItem::action("Add Project", superzed_ui::AddProject),
+                MenuItem::action("New Workspace", superzed_ui::NewWorkspace),
                 MenuItem::action("New Window", workspace::NewWindow),
                 MenuItem::separator(),
+                MenuItem::action("New File", workspace::NewFile),
                 #[cfg(not(target_os = "macos"))]
                 MenuItem::action("Open File...", workspace::OpenFiles),
                 MenuItem::action(
@@ -133,13 +132,6 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
                         create_new_window: false,
                     },
                 ),
-                MenuItem::action(
-                    "Open Remote...",
-                    zed_actions::OpenRemote {
-                        create_new_window: false,
-                        from_existing_connection: false,
-                    },
-                ),
                 MenuItem::separator(),
                 MenuItem::action("Add Folder to Project…", workspace::AddFolderToProject),
                 MenuItem::separator(),
@@ -154,7 +146,7 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
                         close_pinned: true,
                     },
                 ),
-                MenuItem::action("Close Project", workspace::CloseProject),
+                MenuItem::action("Close Workspace", workspace::CloseProject),
                 MenuItem::action("Close Window", workspace::CloseWindow),
             ],
         },
@@ -263,6 +255,14 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
         Menu {
             name: "Run".into(),
             items: vec![
+                MenuItem::action("Launch Agent", superzed_ui::LaunchAgent),
+                MenuItem::action("Reveal Changes", superzed_ui::RevealChanges),
+                MenuItem::action(
+                    "Open Workspace in New Window",
+                    superzed_ui::OpenWorkspaceInNewWindow,
+                ),
+                MenuItem::action("Delete Workspace", superzed_ui::DeleteWorkspace),
+                MenuItem::separator(),
                 MenuItem::action(
                     "Spawn Task",
                     zed_actions::Spawn::ViaModal {
@@ -303,27 +303,29 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
                 MenuItem::action("View Dependency Licenses", zed_actions::OpenLicenses),
                 MenuItem::action("Show Welcome", onboarding::ShowWelcome),
                 MenuItem::separator(),
-                MenuItem::action("File Bug Report...", zed_actions::feedback::FileBugReport),
-                MenuItem::action("Request Feature...", zed_actions::feedback::RequestFeature),
-                MenuItem::action("Email Us...", zed_actions::feedback::EmailZed),
+                MenuItem::action(
+                    "File Bug Report...",
+                    super::OpenBrowser {
+                        url: "https://github.com/nerdface-ai/superzed/issues/new".into(),
+                    },
+                ),
+                MenuItem::action(
+                    "Request Feature...",
+                    super::OpenBrowser {
+                        url: "https://github.com/nerdface-ai/superzed/discussions".into(),
+                    },
+                ),
                 MenuItem::separator(),
                 MenuItem::action(
                     "Documentation",
                     super::OpenBrowser {
-                        url: "https://zed.dev/docs".into(),
-                    },
-                ),
-                MenuItem::action("Zed Repository", feedback::OpenZedRepo),
-                MenuItem::action(
-                    "Zed Twitter",
-                    super::OpenBrowser {
-                        url: "https://twitter.com/zeddotdev".into(),
+                        url: "https://github.com/nerdface-ai/superzed".into(),
                     },
                 ),
                 MenuItem::action(
-                    "Join the Team",
+                    "Superzed Repository",
                     super::OpenBrowser {
-                        url: "https://zed.dev/jobs".into(),
+                        url: "https://github.com/nerdface-ai/superzed".into(),
                     },
                 ),
             ],

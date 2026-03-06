@@ -451,13 +451,13 @@
     // Whether to show the project host and name in the titlebar.
     "show_project_items": true,
     // Whether to show onboarding banners in the titlebar.
-    "show_onboarding_banner": true,
+    "show_onboarding_banner": false,
     // Whether to show user picture in the titlebar.
-    "show_user_picture": true,
+    "show_user_picture": false,
     // Whether to show the user menu in the titlebar.
-    "show_user_menu": true,
+    "show_user_menu": false,
     // Whether to show the sign in button in the titlebar.
-    "show_sign_in": true,
+    "show_sign_in": false,
     // Whether to show the menus in the titlebar.
     "show_menus": false,
   },
@@ -724,13 +724,13 @@
   "resize_all_panels_in_dock": ["left"],
   "project_panel": {
     // Whether to show the project panel button in the status bar
-    "button": true,
+    "button": false,
     // Whether to hide the gitignore entries in the project panel.
     "hide_gitignore": false,
     // Default width of the project panel.
     "default_width": 240,
     // Where to dock the project panel. Can be 'left' or 'right'.
-    "dock": "left",
+    "dock": "right",
     // Spacing between worktree entries in the project panel. Can be 'comfortable' or 'standard'.
     "entry_spacing": "comfortable",
     // Whether to show file icons in the project panel.
@@ -746,7 +746,7 @@
     // Gitignored entries are never auto revealed.
     "auto_reveal_entries": true,
     // Whether the project panel should open on startup.
-    "starts_open": true,
+    "starts_open": false,
     // Whether to fold directories automatically and show compact folders
     // (e.g. "a/b/c" ) when a directory has only one subdirectory inside.
     "auto_fold_dirs": true,
@@ -885,9 +885,9 @@
   },
   "git_panel": {
     // Whether to show the git panel button in the status bar.
-    "button": true,
+    "button": false,
     // Where to dock the git panel. Can be 'left' or 'right'.
-    "dock": "left",
+    "dock": "right",
     // Default width of the git panel.
     "default_width": 360,
     // Style of the git status indicator in the panel.
@@ -940,9 +940,9 @@
     // Whether the inline assistant should use streaming tools, when available
     "inline_assistant_use_streaming_tools": true,
     // Whether the agent is enabled.
-    "enabled": true,
+    "enabled": false,
     // Whether to show the agent panel button in the status bar.
-    "button": true,
+    "button": false,
     // Where to dock the agent panel. Can be 'left', 'right' or 'bottom'.
     "dock": "right",
     // Default width when the agent panel is docked to the left or right.
@@ -1358,10 +1358,10 @@
     // Send anonymized usage data like what languages you're using Zed with.
     "metrics": true,
   },
-  // Whether to disable all AI features in Zed.
+  // Whether to disable all built-in AI features in Superzed.
   //
-  // Default: false
-  "disable_ai": false,
+  // Default: true
+  "disable_ai": true,
   // Automatically update Zed. This setting may be ignored on Linux if
   // installed through a package manager.
   "auto_update": true,
@@ -1609,7 +1609,7 @@
   // Status bar-related settings.
   "status_bar": {
     // Whether to show the status bar.
-    "experimental.show": true,
+    "experimental.show": false,
     // Whether to show the active language button in the status bar.
     "active_language_button": true,
     // Whether to show the cursor position button in the status bar.

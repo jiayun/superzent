@@ -1,12 +1,10 @@
 use anyhow::Result;
-use feature_flags::{AgentV2FeatureFlag, FeatureFlagAppExt};
 use gpui::{
     AnyView, App, Context, DragMoveEvent, Entity, EntityId, EventEmitter, FocusHandle, Focusable,
     ManagedView, MouseButton, Pixels, Render, Subscription, Task, Tiling, Window, WindowId,
     actions, deferred, px,
 };
-use project::{DisableAiSettings, Project};
-use settings::Settings;
+use project::Project;
 use std::future::Future;
 use std::path::PathBuf;
 use ui::prelude::*;
@@ -132,18 +130,14 @@ impl MultiWorkspace {
         });
         let quit_subscription = cx.on_app_quit(Self::app_will_quit);
         let settings_subscription =
-            cx.observe_global_in::<settings::SettingsStore>(window, |this, window, cx| {
-                if DisableAiSettings::get_global(cx).disable_ai && this.sidebar_open {
-                    this.close_sidebar(window, cx);
-                }
-            });
+            cx.observe_global_in::<settings::SettingsStore>(window, |_this, _window, _cx| {});
         Self::subscribe_to_workspace(&workspace, cx);
         Self {
             window_id: window.window_handle().window_id(),
             workspaces: vec![workspace],
             active_workspace_index: 0,
             sidebar: None,
-            sidebar_open: false,
+            sidebar_open: true,
             _sidebar_subscription: None,
             pending_removal_tasks: Vec::new(),
             _serialize_task: None,
@@ -188,7 +182,8 @@ impl MultiWorkspace {
     }
 
     pub fn multi_workspace_enabled(&self, cx: &App) -> bool {
-        cx.has_flag::<AgentV2FeatureFlag>() && !DisableAiSettings::get_global(cx).disable_ai
+        let _ = cx;
+        true
     }
 
     pub fn toggle_sidebar(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -749,7 +744,8 @@ impl Render for MultiWorkspace {
 
         let workspace = self.workspace().clone();
         let workspace_key_context = workspace.update(cx, |workspace, cx| workspace.key_context(cx));
-        let root = workspace.update(cx, |workspace, cx| workspace.actions(h_flex(), window, cx));
+        let titlebar_item = workspace.read(cx).titlebar_item();
+        let root = workspace.update(cx, |workspace, cx| workspace.actions(v_flex(), window, cx));
 
         client_side_decorations(
             root.key_context(workspace_key_context)
@@ -785,26 +781,28 @@ impl Render for MultiWorkspace {
                         },
                     ))
                 })
-                .when(
-                    self.sidebar_open() && self.multi_workspace_enabled(cx),
-                    |this| {
-                        this.on_drag_move(cx.listener(
-                            |this: &mut Self, e: &DragMoveEvent<DraggedSidebar>, _window, cx| {
-                                if let Some(sidebar) = &this.sidebar {
-                                    let new_width = e.event.position.x;
-                                    sidebar.set_width(Some(new_width), cx);
-                                }
-                            },
-                        ))
-                        .children(sidebar)
-                    },
-                )
+                .children(titlebar_item)
                 .child(
                     div()
-                        .flex()
                         .flex_1()
-                        .size_full()
+                        .w_full()
+                        .flex()
+                        .flex_row()
                         .overflow_hidden()
+                        .when(
+                            self.sidebar_open() && self.multi_workspace_enabled(cx),
+                            |this| {
+                                this.on_drag_move(cx.listener(
+                                    |this: &mut Self, e: &DragMoveEvent<DraggedSidebar>, _window, cx| {
+                                        if let Some(sidebar) = &this.sidebar {
+                                            let new_width = e.event.position.x;
+                                            sidebar.set_width(Some(new_width), cx);
+                                        }
+                                    },
+                                ))
+                                .children(sidebar)
+                            },
+                        )
                         .child(self.workspace().clone()),
                 )
                 .child(self.workspace().read(cx).modal_layer.clone()),
