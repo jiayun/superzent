@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
-use superzed_model::{GitChangeSummary, ProjectEntry, WorkspaceEntry, WorkspaceKind};
+use superzet_model::{GitChangeSummary, ProjectEntry, WorkspaceEntry, WorkspaceKind};
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -28,7 +28,7 @@ pub struct WorkspaceRefresh {
 }
 
 #[derive(Default, Deserialize)]
-struct SupersetConfig {
+struct SuperzetConfig {
     #[serde(default)]
     setup: Vec<String>,
     #[serde(default)]
@@ -85,12 +85,12 @@ pub fn create_workspace(project: &ProjectEntry, preset_id: &str) -> Result<Works
     let base_ref = current_branch(&repo_root).unwrap_or_else(|| "HEAD".to_string());
 
     let parent = repo_root.parent().unwrap_or(repo_root.as_path());
-    let worktree_root = parent.join(".superzed-worktrees").join(repo_name);
+    let worktree_root = parent.join(".superzet-worktrees").join(repo_name);
     fs::create_dir_all(&worktree_root)?;
 
     let workspace_name = unique_workspace_name(&worktree_root);
     let worktree_path = worktree_root.join(&workspace_name);
-    let branch_name = format!("superzed/{}", slugify(&workspace_name));
+    let branch_name = format!("superzet/{}", slugify(&workspace_name));
 
     run_git(
         &repo_root,
@@ -258,7 +258,7 @@ fn run_repo_hooks(
     workspace_name: &str,
     phase: HookPhase,
 ) -> Result<()> {
-    let config = load_superset_config(repo_root)?;
+    let config = load_superzet_config(repo_root)?;
     let commands = match phase {
         HookPhase::Setup => config.setup,
         HookPhase::Teardown => config.teardown,
@@ -271,10 +271,10 @@ fn run_repo_hooks(
     Ok(())
 }
 
-fn load_superset_config(repo_root: &Path) -> Result<SupersetConfig> {
-    let config_path = repo_root.join(".superset").join("config.json");
+fn load_superzet_config(repo_root: &Path) -> Result<SuperzetConfig> {
+    let config_path = repo_root.join(".superzet").join("config.json");
     if !config_path.exists() {
-        return Ok(SupersetConfig::default());
+        return Ok(SuperzetConfig::default());
     }
 
     let contents = fs::read_to_string(&config_path)
@@ -365,7 +365,7 @@ mod tests {
                 "worktree",
                 "add",
                 "-b",
-                "feature/superzed-test",
+                "feature/superzet-test",
                 worktree_path.to_str().unwrap(),
                 "HEAD",
             ],
@@ -402,7 +402,7 @@ mod tests {
                 "worktree",
                 "add",
                 "-b",
-                "feature/superzed-test",
+                "feature/superzet-test",
                 worktree_path.to_str().unwrap(),
                 "HEAD",
             ],
@@ -414,7 +414,7 @@ mod tests {
             .repo_path
             .parent()
             .unwrap()
-            .join(".superzed-worktrees")
+            .join(".superzet-worktrees")
             .join("repo");
 
         assert_eq!(registration.project.repo_root, repo.repo_path);
@@ -434,8 +434,8 @@ mod tests {
         fs::create_dir_all(&repo_path).unwrap();
 
         git(&repo_path, &["init", "-b", "main"]);
-        git(&repo_path, &["config", "user.name", "Superzed Tests"]);
-        git(&repo_path, &["config", "user.email", "tests@superzed.dev"]);
+        git(&repo_path, &["config", "user.name", "Superzet Tests"]);
+        git(&repo_path, &["config", "user.email", "tests@superzet.dev"]);
         fs::write(repo_path.join("README.md"), "hello\n").unwrap();
         git(&repo_path, &["add", "README.md"]);
         git(&repo_path, &["commit", "-m", "init"]);

@@ -1,12 +1,12 @@
 [package]
 description = "The terminal for coding agents."
 edition.workspace = true
-name = "zed"
+name = "superzet"
 version = "0.228.0"
 publish.workspace = true
 license = "GPL-3.0-or-later"
 authors = ["Zed Team <hi@zed.dev>"]
-default-run = "zed"
+default-run = "superzet"
 
 [lints]
 workspace = true
@@ -52,7 +52,7 @@ visual-tests = [
 ]
 
 [[bin]]
-name = "zed"
+name = "superzet"
 path = "src/main.rs"
 
 [[bin]]
@@ -186,8 +186,8 @@ sidebar.workspace = true
 smol.workspace = true
 snippet_provider.workspace = true
 snippets_ui.workspace = true
-superzed_model.workspace = true
-superzed_ui.workspace = true
+superzet_model.workspace = true
+superzet_ui.workspace = true
 svg_preview.workspace = true
 sysinfo.workspace = true
 tab_switcher.workspace = true
@@ -266,35 +266,35 @@ repl = { workspace = true, features = ["test-support"] }
 
 [package.metadata.bundle-dev]
 icon = ["resources/app-icon-dev@2x.png", "resources/app-icon-dev.png"]
-identifier = "ai.nerdface.Superzed-Dev"
-name = "Superzed Dev"
+identifier = "ai.nerdface.superzet-dev"
+name = "superzet dev"
 osx_minimum_system_version = "10.15.7"
 osx_info_plist_exts = ["resources/info/*"]
-osx_url_schemes = ["zed"]
+osx_url_schemes = ["superzet"]
 
 [package.metadata.bundle-nightly]
 icon = ["resources/app-icon-nightly@2x.png", "resources/app-icon-nightly.png"]
-identifier = "ai.nerdface.Superzed-Nightly"
-name = "Superzed Nightly"
+identifier = "ai.nerdface.superzet-nightly"
+name = "superzet nightly"
 osx_minimum_system_version = "10.15.7"
 osx_info_plist_exts = ["resources/info/*"]
-osx_url_schemes = ["zed"]
+osx_url_schemes = ["superzet"]
 
 [package.metadata.bundle-preview]
 icon = ["resources/app-icon-preview@2x.png", "resources/app-icon-preview.png"]
-identifier = "ai.nerdface.Superzed-Preview"
-name = "Superzed Preview"
+identifier = "ai.nerdface.superzet-preview"
+name = "superzet preview"
 osx_minimum_system_version = "10.15.7"
 osx_info_plist_exts = ["resources/info/*"]
-osx_url_schemes = ["zed"]
+osx_url_schemes = ["superzet"]
 
 [package.metadata.bundle-stable]
 icon = ["resources/app-icon@2x.png", "resources/app-icon.png"]
-identifier = "ai.nerdface.Superzed"
-name = "Superzed"
+identifier = "ai.nerdface.superzet"
+name = "superzet"
 osx_minimum_system_version = "10.15.7"
 osx_info_plist_exts = ["resources/info/*"]
-osx_url_schemes = ["zed"]
+osx_url_schemes = ["superzet"]
 
 [package.metadata.cargo-machete]
 ignored = ["profiling", "zstd", "tracing"]

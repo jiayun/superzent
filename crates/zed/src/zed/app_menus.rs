@@ -1,6 +1,6 @@
 use gpui::{App, Menu, MenuItem, OsAction};
 use release_channel::ReleaseChannel;
-use superzed_ui;
+use superzet_ui;
 use zed_actions::dev;
 
 pub fn app_menus(cx: &mut App) -> Vec<Menu> {
@@ -39,8 +39,8 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
         }),
         MenuItem::separator(),
         MenuItem::action("Workspace Sidebar", workspace::ToggleWorkspaceSidebar),
-        MenuItem::action("Workspace Details", superzed_ui::ToggleRightSidebar),
-        MenuItem::action("Reveal Changes", superzed_ui::RevealChanges),
+        MenuItem::action("Workspace Details", superzet_ui::ToggleRightSidebar),
+        MenuItem::action("Reveal Changes", superzet_ui::RevealChanges),
         MenuItem::separator(),
         MenuItem::action("Diagnostics", diagnostics::Deploy),
         MenuItem::separator(),
@@ -56,9 +56,9 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
 
     vec![
         Menu {
-            name: "Superzed".into(),
+            name: "superzet".into(),
             items: vec![
-                MenuItem::action("About Superzed", zed_actions::About),
+                MenuItem::action("About superzet", zed_actions::About),
                 MenuItem::action("Check for Updates", auto_update::Check),
                 MenuItem::separator(),
                 MenuItem::submenu(Menu {
@@ -99,20 +99,20 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
                 MenuItem::action("Install CLI", install_cli::InstallCliBinary),
                 MenuItem::separator(),
                 #[cfg(target_os = "macos")]
-                MenuItem::action("Hide Superzed", super::Hide),
+                MenuItem::action("Hide superzet", super::Hide),
                 #[cfg(target_os = "macos")]
                 MenuItem::action("Hide Others", super::HideOthers),
                 #[cfg(target_os = "macos")]
                 MenuItem::action("Show All", super::ShowAll),
                 MenuItem::separator(),
-                MenuItem::action("Quit Superzed", Quit),
+                MenuItem::action("Quit superzet", Quit),
             ],
         },
         Menu {
             name: "File".into(),
             items: vec![
-                MenuItem::action("Add Project", superzed_ui::AddProject),
-                MenuItem::action("New Workspace", superzed_ui::NewWorkspace),
+                MenuItem::action("Add Project", superzet_ui::AddProject),
+                MenuItem::action("New Workspace", superzet_ui::NewWorkspace),
                 MenuItem::action("New Window", workspace::NewWindow),
                 MenuItem::separator(),
                 MenuItem::action("New File", workspace::NewFile),
@@ -255,12 +255,12 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
         Menu {
             name: "Run".into(),
             items: vec![
-                MenuItem::action("Reveal Changes", superzed_ui::RevealChanges),
+                MenuItem::action("Reveal Changes", superzet_ui::RevealChanges),
                 MenuItem::action(
                     "Open Workspace in New Window",
-                    superzed_ui::OpenWorkspaceInNewWindow,
+                    superzet_ui::OpenWorkspaceInNewWindow,
                 ),
-                MenuItem::action("Delete Workspace", superzed_ui::DeleteWorkspace),
+                MenuItem::action("Delete Workspace", superzet_ui::DeleteWorkspace),
                 MenuItem::separator(),
                 MenuItem::action(
                     "Spawn Task",
@@ -305,26 +305,26 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
                 MenuItem::action(
                     "File Bug Report...",
                     super::OpenBrowser {
-                        url: "https://github.com/nerdface-ai/superzed/issues/new".into(),
+                        url: "https://github.com/nerdface-ai/superzet/issues/new".into(),
                     },
                 ),
                 MenuItem::action(
                     "Request Feature...",
                     super::OpenBrowser {
-                        url: "https://github.com/nerdface-ai/superzed/discussions".into(),
+                        url: "https://github.com/nerdface-ai/superzet/discussions".into(),
                     },
                 ),
                 MenuItem::separator(),
                 MenuItem::action(
                     "Documentation",
                     super::OpenBrowser {
-                        url: "https://github.com/nerdface-ai/superzed".into(),
+                        url: "https://github.com/nerdface-ai/superzet".into(),
                     },
                 ),
                 MenuItem::action(
-                    "Superzed Repository",
+                    "superzet repository",
                     super::OpenBrowser {
-                        url: "https://github.com/nerdface-ai/superzed".into(),
+                        url: "https://github.com/nerdface-ai/superzet".into(),
                     },
                 ),
             ],

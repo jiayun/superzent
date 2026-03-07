@@ -215,7 +215,7 @@ pub fn check(_: &Check, window: &mut Window, cx: &mut App) {
     if let Some(message) = option_env!("ZED_UPDATE_EXPLANATION") {
         drop(window.prompt(
             gpui::PromptLevel::Info,
-            "Zed was installed via a package manager.",
+            "superzet was installed via a package manager.",
             Some(message),
             &["Ok"],
             cx,
@@ -226,7 +226,7 @@ pub fn check(_: &Check, window: &mut Window, cx: &mut App) {
     if let Ok(message) = env::var("ZED_UPDATE_EXPLANATION") {
         drop(window.prompt(
             gpui::PromptLevel::Info,
-            "Zed was installed via a package manager.",
+            "superzet was installed via a package manager.",
             Some(&message),
             &["Ok"],
             cx,
@@ -266,9 +266,11 @@ pub fn release_notes_url(cx: &mut App) -> Option<String> {
             auto_updater.client.http_client().build_url(&path)
         }
         ReleaseChannel::Nightly => {
-            "https://github.com/zed-industries/zed/commits/nightly/".to_string()
+            "https://github.com/nerdface-ai/superzet/commits/nightly/".to_string()
         }
-        ReleaseChannel::Dev => "https://github.com/zed-industries/zed/commits/main/".to_string(),
+        ReleaseChannel::Dev => {
+            "https://github.com/nerdface-ai/superzet/commits/main/".to_string()
+        }
     };
     Some(url)
 }
@@ -287,7 +289,7 @@ impl InstallerDir {
     async fn new() -> Result<Self> {
         Ok(Self(
             tempfile::Builder::new()
-                .prefix("zed-auto-update")
+                .prefix("superzet-auto-update")
                 .tempdir()?,
         ))
     }
@@ -305,7 +307,7 @@ impl InstallerDir {
     async fn new() -> Result<Self> {
         let installer_dir = std::env::current_exe()?
             .parent()
-            .context("No parent dir for Zed.exe")?
+            .context("No parent dir for superzet.exe")?
             .join("updates");
         if smol::fs::metadata(&installer_dir).await.is_ok() {
             smol::fs::remove_dir_all(&installer_dir).await?;
@@ -340,7 +342,7 @@ impl AutoUpdater {
         // On windows, executable files cannot be overwritten while they are
         // running, so we must wait to overwrite the application until quitting
         // or restarting. When quitting the app, we spawn the auto update helper
-        // to finish the auto update process after Zed exits. When restarting
+        // to finish the auto update process after superzet exits. When restarting
         // the app after an update, we use `set_restart_path` to run the auto
         // update helper instead of the app, so that it can overwrite the app
         // and then spawn the new binary.
@@ -437,7 +439,7 @@ impl AutoUpdater {
         true
     }
 
-    // If you are packaging Zed and need to override the place it downloads SSH remotes from,
+    // If you are packaging superzet and need to override the place it downloads SSH remotes from,
     // you can override this function. You should also update get_remote_server_release_url to return
     // Ok(None).
     pub async fn download_remote_server_release(
@@ -601,7 +603,8 @@ impl AutoUpdater {
         });
 
         let fetched_release_data =
-            Self::get_release_asset(&this, release_channel, None, "zed", OS, ARCH, cx).await?;
+            Self::get_release_asset(&this, release_channel, None, "superzet", OS, ARCH, cx)
+                .await?;
         let fetched_version = fetched_release_data.clone().version;
         let app_commit_sha = Ok(cx.update(|cx| AppCommitSha::try_global(cx).map(|sha| sha.full())));
         let newer_version = Self::check_if_fetched_version_is_newer(
@@ -721,9 +724,9 @@ impl AutoUpdater {
 
     async fn target_path(installer_dir: &InstallerDir) -> Result<PathBuf> {
         let filename = match OS {
-            "macos" => anyhow::Ok("Zed.dmg"),
-            "linux" => Ok("zed.tar.gz"),
-            "windows" => Ok("Zed.exe"),
+            "macos" => anyhow::Ok("superzet.dmg"),
+            "linux" => Ok("superzet.tar.gz"),
+            "windows" => Ok("superzet.exe"),
             unsupported_os => anyhow::bail!("not supported: {unsupported_os}"),
         }?;
 
@@ -897,7 +900,7 @@ async fn install_release_linux(
     let home_dir = PathBuf::from(env::var("HOME").context("no HOME env var set")?);
     let running_app_path = cx.update(|cx| cx.app_path())?;
 
-    let extracted = temp_dir.path().join("zed");
+    let extracted = temp_dir.path().join("superzet");
     fs::create_dir_all(&extracted)
         .await
         .context("failed to create directory into which to extract update")?;
@@ -923,12 +926,12 @@ async fn install_release_linux(
     } else {
         String::default()
     };
-    let app_folder_name = format!("zed{}.app", suffix);
+    let app_folder_name = format!("superzet{}.app", suffix);
 
     let from = extracted.join(&app_folder_name);
     let mut to = home_dir.join(".local");
 
-    let expected_suffix = format!("{}/libexec/zed-editor", app_folder_name);
+    let expected_suffix = format!("{}/libexec/superzet-editor", app_folder_name);
 
     if let Some(prefix) = running_app_path
         .to_str()
@@ -946,7 +949,7 @@ async fn install_release_linux(
 
     anyhow::ensure!(
         output.status.success(),
-        "failed to copy Zed update from {:?} to {:?}: {:?}",
+        "failed to copy superzet update from {:?} to {:?}: {:?}",
         from,
         to,
         String::from_utf8_lossy(&output.stderr)
@@ -965,7 +968,7 @@ async fn install_release_macos(
         .file_name()
         .with_context(|| format!("invalid running app path {running_app_path:?}"))?;
 
-    let mount_path = temp_dir.path().join("Zed");
+    let mount_path = temp_dir.path().join("superzet");
     let mut mounted_app_path: OsString = mount_path.join(running_app_filename).into();
 
     mounted_app_path.push("/");
@@ -1008,7 +1011,7 @@ async fn install_release_macos(
 async fn cleanup_windows() -> Result<()> {
     let parent = std::env::current_exe()?
         .parent()
-        .context("No parent dir for Zed.exe")?
+        .context("No parent dir for superzet.exe")?
         .to_owned();
 
     // keep in sync with crates/auto_update_helper/src/updater.rs
@@ -1037,7 +1040,7 @@ async fn install_release_windows(downloaded_installer: PathBuf) -> Result<Option
     // deleting the old one, and launching the new binary.
     let helper_path = std::env::current_exe()?
         .parent()
-        .context("No parent dir for Zed.exe")?
+        .context("No parent dir for superzet.exe")?
         .join("tools")
         .join("auto_update_helper.exe");
     Ok(Some(helper_path))

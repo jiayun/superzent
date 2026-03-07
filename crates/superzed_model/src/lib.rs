@@ -111,7 +111,7 @@ pub struct AgentSession {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SuperzedState {
+pub struct SuperzetState {
     pub active_project_id: Option<String>,
     pub active_workspace_id: Option<String>,
     pub projects: Vec<ProjectEntry>,
@@ -120,7 +120,7 @@ pub struct SuperzedState {
     pub presets: Vec<AgentPreset>,
 }
 
-impl Default for SuperzedState {
+impl Default for SuperzetState {
     fn default() -> Self {
         Self {
             active_project_id: None,
@@ -133,23 +133,23 @@ impl Default for SuperzedState {
     }
 }
 
-pub struct SuperzedStore {
+pub struct SuperzetStore {
     state_path: PathBuf,
-    state: SuperzedState,
+    state: SuperzetState,
 }
 
-struct GlobalSuperzedStore(Entity<SuperzedStore>);
+struct GlobalSuperzetStore(Entity<SuperzetStore>);
 
-impl Global for GlobalSuperzedStore {}
+impl Global for GlobalSuperzetStore {}
 
-impl SuperzedStore {
+impl SuperzetStore {
     pub fn init(cx: &mut App) {
         let store = cx.new(|_| Self::load());
-        cx.set_global(GlobalSuperzedStore(store));
+        cx.set_global(GlobalSuperzetStore(store));
     }
 
     pub fn global(cx: &App) -> Entity<Self> {
-        cx.global::<GlobalSuperzedStore>().0.clone()
+        cx.global::<GlobalSuperzetStore>().0.clone()
     }
 
     pub fn projects(&self) -> &[ProjectEntry] {
@@ -239,7 +239,7 @@ impl SuperzedStore {
         self.state
             .presets
             .first()
-            .expect("Superzed requires at least one agent preset")
+            .expect("Superzet requires at least one agent preset")
     }
 
     pub fn preset(&self, id: &str) -> Option<&AgentPreset> {
@@ -638,7 +638,7 @@ impl SuperzedStore {
         let state_path = state_path();
         let mut state = fs::read_to_string(&state_path)
             .ok()
-            .and_then(|contents| serde_json::from_str::<SuperzedState>(&contents).ok())
+            .and_then(|contents| serde_json::from_str::<SuperzetState>(&contents).ok())
             .or_else(load_legacy_state)
             .unwrap_or_default();
 
@@ -730,7 +730,7 @@ impl SuperzedStore {
 
     fn persist_and_notify(&self, cx: &mut Context<Self>) {
         if let Err(error) = self.persist() {
-            log::error!("failed to persist Superzed state: {error:#}");
+            log::error!("failed to persist Superzet state: {error:#}");
         }
         cx.notify();
     }
@@ -770,7 +770,7 @@ struct LegacyTaskWorkspace {
     last_event_at: DateTime<Utc>,
 }
 
-fn load_legacy_state() -> Option<SuperzedState> {
+fn load_legacy_state() -> Option<SuperzetState> {
     let legacy_path = legacy_state_path();
     let contents = fs::read_to_string(&legacy_path).ok()?;
     let legacy = serde_json::from_str::<LegacyState>(&contents).ok()?;
@@ -785,7 +785,7 @@ fn load_legacy_state() -> Option<SuperzedState> {
         .map(|preset| preset.id.clone())
         .unwrap_or_else(|| "codex".to_string());
 
-    let mut state = SuperzedState {
+    let mut state = SuperzetState {
         active_project_id: None,
         active_workspace_id: legacy.active_task_id.clone(),
         projects: Vec::new(),
@@ -885,11 +885,11 @@ fn load_legacy_state() -> Option<SuperzedState> {
 }
 
 fn state_path() -> PathBuf {
-    paths::data_dir().join("superzed").join("state.json")
+    paths::data_dir().join("superzet").join("state.json")
 }
 
 fn legacy_state_path() -> PathBuf {
-    paths::data_dir().join("superzed").join("tasks.json")
+    paths::data_dir().join("superzet").join("tasks.json")
 }
 
 fn default_presets() -> Vec<AgentPreset> {

@@ -1,4 +1,4 @@
-use superzed_model::{AgentPreset, AgentSession, WorkspaceEntry};
+use superzet_model::{AgentPreset, AgentSession, WorkspaceEntry};
 use task::{HideStrategy, RevealStrategy, RevealTarget, Shell, SpawnInTerminal, TaskId};
 
 pub fn spawn_for_workspace(
@@ -14,7 +14,7 @@ pub fn spawn_for_workspace(
     };
 
     SpawnInTerminal {
-        id: TaskId(format!("superzed:{}:{}", workspace.id, session.id)),
+        id: TaskId(format!("superzet:{}:{}", workspace.id, session.id)),
         full_label: label.clone(),
         label,
         command: Some(preset.command.clone()),

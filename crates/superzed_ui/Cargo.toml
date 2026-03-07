@@ -1,5 +1,5 @@
 [package]
-name = "superzed_ui"
+name = "superzet_ui"
 version = "0.1.0"
 edition.workspace = true
 publish.workspace = true
@@ -19,8 +19,8 @@ gpui.workspace = true
 menu.workspace = true
 project.workspace = true
 project_panel.workspace = true
-superzed_git.workspace = true
-superzed_model.workspace = true
+superzet_git.workspace = true
+superzet_model.workspace = true
 terminal_view.workspace = true
 theme.workspace = true
 ui.workspace = true

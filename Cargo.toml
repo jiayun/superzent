@@ -430,9 +430,9 @@ sqlez = { path = "crates/sqlez" }
 sqlez_macros = { path = "crates/sqlez_macros" }
 story = { path = "crates/story" }
 streaming_diff = { path = "crates/streaming_diff" }
-superzed_git = { path = "crates/superzed_git" }
-superzed_model = { path = "crates/superzed_model" }
-superzed_ui = { path = "crates/superzed_ui" }
+superzet_git = { path = "crates/superzed_git" }
+superzet_model = { path = "crates/superzed_model" }
+superzet_ui = { path = "crates/superzed_ui" }
 sum_tree = { path = "crates/sum_tree" }
 codestral = { path = "crates/codestral" }
 system_specs = { path = "crates/system_specs" }
@@ -468,7 +468,7 @@ web_search_providers = { path = "crates/web_search_providers" }
 workspace = { path = "crates/workspace" }
 worktree = { path = "crates/worktree" }
 x_ai = { path = "crates/x_ai" }
-zed = { path = "crates/zed" }
+superzet = { path = "crates/zed" }
 zed_actions = { path = "crates/zed_actions" }
 zed_env_vars = { path = "crates/zed_env_vars" }
 edit_prediction = { path = "crates/edit_prediction" }
@@ -927,7 +927,7 @@ lto = "thin"
 codegen-units = 1
 
 [profile.release.package]
-zed = { codegen-units = 16 }
+superzet = { codegen-units = 16 }
 
 [profile.release-fast]
 inherits = "release"

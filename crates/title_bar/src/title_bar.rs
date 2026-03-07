@@ -36,8 +36,8 @@ use remote::RemoteConnectionOptions;
 use settings::Settings;
 use settings::WorktreeId;
 use std::sync::Arc;
-use superzed_model::SuperzedStore;
-use superzed_ui;
+use superzet_model::SuperzetStore;
+use superzet_ui;
 use theme::ActiveTheme;
 use title_bar_settings::TitleBarSettings;
 use ui::{
@@ -148,7 +148,7 @@ pub fn init(cx: &mut App) {
 pub struct TitleBar {
     platform_titlebar: Entity<PlatformTitleBar>,
     project: Entity<Project>,
-    superzed_store: Entity<SuperzedStore>,
+    superzet_store: Entity<SuperzetStore>,
     user_store: Entity<UserStore>,
     client: Arc<Client>,
     workspace: WeakEntity<Workspace>,
@@ -188,11 +188,11 @@ impl Render for TitleBar {
                         .bg(title_bar_color)
                         .h(height)
                         .w_full()
-                        .child(self.render_superzed_header(window, cx, title_bar_settings)),
+                        .child(self.render_superzet_header(window, cx, title_bar_settings)),
                 )
                 .into_any_element()
         } else {
-            let header = self.render_superzed_header(window, cx, title_bar_settings);
+            let header = self.render_superzet_header(window, cx, title_bar_settings);
             self.platform_titlebar.update(cx, |this, _| {
                 this.set_children([header]);
             });
@@ -210,7 +210,7 @@ impl TitleBar {
     ) -> Self {
         let project = workspace.project().clone();
         let git_store = project.read(cx).git_store().clone();
-        let superzed_store = SuperzedStore::global(cx);
+        let superzet_store = SuperzetStore::global(cx);
         let user_store = workspace.app_state().user_store.clone();
         let client = workspace.app_state().client.clone();
         let active_call = ActiveCall::global(cx);
@@ -262,7 +262,7 @@ impl TitleBar {
             }),
         );
         subscriptions.push(cx.observe(&user_store, |_a, _, cx| cx.notify()));
-        subscriptions.push(cx.observe(&superzed_store, |_a, _, cx| cx.notify()));
+        subscriptions.push(cx.observe(&superzet_store, |_a, _, cx| cx.notify()));
         if let Some(trusted_worktrees) = TrustedWorktrees::try_get_global(cx) {
             subscriptions.push(cx.subscribe(&trusted_worktrees, |_, _, _, cx| {
                 cx.notify();
@@ -332,7 +332,7 @@ impl TitleBar {
             application_menu,
             workspace: workspace.weak_handle(),
             project,
-            superzed_store,
+            superzet_store,
             user_store,
             client,
             _subscriptions: subscriptions,
@@ -346,7 +346,7 @@ impl TitleBar {
         self.project.read(cx).visible_worktrees(cx).count()
     }
 
-    fn render_superzed_header(
+    fn render_superzet_header(
         &self,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -378,7 +378,7 @@ impl TitleBar {
             )
             .child(
                 h_flex().flex_1().justify_center().px_4().child(
-                    Label::new(self.superzed_header_title(cx))
+                    Label::new(self.superzet_header_title(cx))
                         .size(LabelSize::Small)
                         .color(Color::Muted)
                         .truncate(),
@@ -391,7 +391,7 @@ impl TitleBar {
                     .items_center()
                     .gap_1()
                     .child(
-                        IconButton::new("superzed-header-toggle-details", details_sidebar_icon)
+                        IconButton::new("superzet-header-toggle-details", details_sidebar_icon)
                             .shape(ui::IconButtonShape::Square)
                             .icon_size(IconSize::Small)
                             .tooltip(move |window, cx| {
@@ -405,11 +405,11 @@ impl TitleBar {
                                 if let Some(workspace) = workspace.upgrade() {
                                     workspace.update(cx, |workspace, cx| {
                                         if workspace.right_dock().read(cx).is_open() {
-                                            workspace.close_panel::<superzed_ui::SuperzedRightSidebar>(
+                                            workspace.close_panel::<superzet_ui::SuperzetRightSidebar>(
                                                 window, cx,
                                             );
                                         } else {
-                                            workspace.open_panel::<superzed_ui::SuperzedRightSidebar>(
+                                            workspace.open_panel::<superzet_ui::SuperzetRightSidebar>(
                                                 window, cx,
                                             );
                                         }
@@ -422,8 +422,8 @@ impl TitleBar {
             .into_any_element()
     }
 
-    fn superzed_header_title(&self, cx: &App) -> SharedString {
-        let store = self.superzed_store.read(cx);
+    fn superzet_header_title(&self, cx: &App) -> SharedString {
+        let store = self.superzet_store.read(cx);
         match (store.active_project(), store.active_workspace()) {
             (Some(project), Some(workspace)) if workspace.display_name() != project.name => {
                 format!("{} - {}", project.name, workspace.display_name()).into()

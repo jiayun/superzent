@@ -1,5 +1,5 @@
 [package]
-name = "superzed_agent"
+name = "superzet_agent"
 version = "0.1.0"
 edition.workspace = true
 publish.workspace = true
@@ -12,5 +12,5 @@ path = "src/lib.rs"
 workspace = true
 
 [dependencies]
-superzed_model.workspace = true
+superzet_model.workspace = true
 task.workspace = true
