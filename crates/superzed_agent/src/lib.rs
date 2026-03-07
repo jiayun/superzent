@@ -25,7 +25,7 @@ pub fn spawn_for_workspace(
         use_new_terminal: true,
         allow_concurrent_runs: true,
         reveal: RevealStrategy::Always,
-        reveal_target: RevealTarget::Dock,
+        reveal_target: RevealTarget::Center,
         hide: HideStrategy::Never,
         shell: Shell::System,
         show_summary: true,

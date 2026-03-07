@@ -793,7 +793,10 @@ impl Render for MultiWorkspace {
                             self.sidebar_open() && self.multi_workspace_enabled(cx),
                             |this| {
                                 this.on_drag_move(cx.listener(
-                                    |this: &mut Self, e: &DragMoveEvent<DraggedSidebar>, _window, cx| {
+                                    |this: &mut Self,
+                                     e: &DragMoveEvent<DraggedSidebar>,
+                                     _window,
+                                     cx| {
                                         if let Some(sidebar) = &this.sidebar {
                                             let new_width = e.event.position.x;
                                             sidebar.set_width(Some(new_width), cx);

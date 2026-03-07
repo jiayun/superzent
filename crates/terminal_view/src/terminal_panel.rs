@@ -526,24 +526,16 @@ impl TerminalPanel {
         window: &mut Window,
         cx: &mut Context<Workspace>,
     ) {
-        let Some(terminal_panel) = workspace.panel::<Self>(cx) else {
-            return;
-        };
-
-        terminal_panel
-            .update(cx, |panel, cx| {
-                if action.local {
-                    panel.add_local_terminal_shell(RevealStrategy::Always, window, cx)
-                } else {
-                    panel.add_terminal_shell(
-                        Some(action.working_directory.clone()),
-                        RevealStrategy::Always,
-                        window,
-                        cx,
-                    )
-                }
-            })
-            .detach_and_log_err(cx);
+        let local = action.local;
+        let working_directory = Some(action.working_directory.clone());
+        Self::add_center_terminal(workspace, window, cx, move |project, cx| {
+            if local {
+                project.create_local_terminal(cx)
+            } else {
+                project.create_terminal_shell(working_directory, cx)
+            }
+        })
+        .detach_and_log_err(cx);
     }
 
     pub fn spawn_task(
@@ -656,24 +648,16 @@ impl TerminalPanel {
         window: &mut Window,
         cx: &mut Context<Workspace>,
     ) {
-        let Some(terminal_panel) = workspace.panel::<Self>(cx) else {
-            return;
-        };
-
-        terminal_panel
-            .update(cx, |this, cx| {
-                if action.local {
-                    this.add_local_terminal_shell(RevealStrategy::Always, window, cx)
-                } else {
-                    this.add_terminal_shell(
-                        default_working_directory(workspace, cx),
-                        RevealStrategy::Always,
-                        window,
-                        cx,
-                    )
-                }
-            })
-            .detach_and_log_err(cx);
+        let local = action.local;
+        let working_directory = default_working_directory(workspace, cx);
+        Self::add_center_terminal(workspace, window, cx, move |project, cx| {
+            if local {
+                project.create_local_terminal(cx)
+            } else {
+                project.create_terminal_shell(working_directory, cx)
+            }
+        })
+        .detach_and_log_err(cx);
     }
 
     fn terminals_for_task(

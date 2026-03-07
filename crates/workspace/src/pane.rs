@@ -17,11 +17,11 @@ use anyhow::Result;
 use collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use futures::{StreamExt, stream::FuturesUnordered};
 use gpui::{
-    Action, AnyElement, App, AsyncWindowContext, ClickEvent, ClipboardItem, Context, Corner, Div,
-    DragMoveEvent, Entity, EntityId, EventEmitter, ExternalPaths, FocusHandle, FocusOutEvent,
-    Focusable, KeyContext, MouseButton, NavigationDirection, Pixels, Point, PromptLevel, Render,
-    ScrollHandle, Subscription, Task, WeakEntity, WeakFocusHandle, Window, actions, anchored,
-    deferred, prelude::*,
+    Action, AnyElement, AnyView, App, AsyncWindowContext, ClickEvent, ClipboardItem, Context,
+    Corner, Div, DragMoveEvent, Entity, EntityId, EventEmitter, ExternalPaths, FocusHandle,
+    FocusOutEvent, Focusable, KeyContext, MouseButton, NavigationDirection, Pixels, Point,
+    PromptLevel, Render, ScrollHandle, Subscription, Task, WeakEntity, WeakFocusHandle, Window,
+    actions, anchored, deferred, prelude::*,
 };
 use itertools::Itertools;
 use language::{Capability, DiagnosticSeverity};
@@ -417,6 +417,7 @@ pub struct Pane {
     /// If a certain project item wants to get recreated with specific data, it can persist its data before the recreation here.
     pub project_item_restoration_data: HashMap<ProjectItemKind, Box<dyn Any + Send>>,
     welcome_page: Option<Entity<crate::welcome::WelcomePage>>,
+    empty_state_view: Option<AnyView>,
 
     pub in_center_group: bool,
 }
@@ -585,6 +586,7 @@ impl Pane {
             diagnostic_summary_update: Task::ready(()),
             project_item_restoration_data: HashMap::default(),
             welcome_page: None,
+            empty_state_view: None,
             in_center_group: false,
         }
     }
@@ -4021,6 +4023,11 @@ impl Pane {
         self.display_nav_history_buttons = display;
     }
 
+    pub fn set_empty_state_view(&mut self, view: AnyView, cx: &mut Context<Self>) {
+        self.empty_state_view = Some(view);
+        cx.notify();
+    }
+
     fn pinned_item_ids(&self) -> Vec<EntityId> {
         self.items
             .iter()
@@ -4384,7 +4391,23 @@ impl Render for Pane {
                                         }
                                     },
                                 ));
-                            if has_worktrees || !self.should_display_welcome_page {
+                            if self.in_center_group {
+                                if let Some(empty_state_view) = self.empty_state_view.clone() {
+                                    placeholder.child(empty_state_view)
+                                } else if has_worktrees || !self.should_display_welcome_page {
+                                    placeholder
+                                } else {
+                                    if self.welcome_page.is_none() {
+                                        let workspace = self.workspace.clone();
+                                        self.welcome_page = Some(cx.new(|cx| {
+                                            crate::welcome::WelcomePage::new(
+                                                workspace, true, window, cx,
+                                            )
+                                        }));
+                                    }
+                                    placeholder.child(self.welcome_page.clone().unwrap())
+                                }
+                            } else if has_worktrees || !self.should_display_welcome_page {
                                 placeholder
                             } else {
                                 if self.welcome_page.is_none() {

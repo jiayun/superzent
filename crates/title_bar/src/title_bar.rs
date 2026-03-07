@@ -31,13 +31,13 @@ use gpui::{
     StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window, actions, div,
 };
 use onboarding_banner::OnboardingBanner;
-use project::{
-    Project, git_store::GitStoreEvent, trusted_worktrees::TrustedWorktrees,
-};
+use project::{Project, git_store::GitStoreEvent, trusted_worktrees::TrustedWorktrees};
 use remote::RemoteConnectionOptions;
 use settings::Settings;
 use settings::WorktreeId;
 use std::sync::Arc;
+use superzed_model::SuperzedStore;
+use superzed_ui;
 use theme::ActiveTheme;
 use title_bar_settings::TitleBarSettings;
 use ui::{
@@ -51,7 +51,6 @@ use workspace::{
     notifications::NotifyResultExt,
 };
 use zed_actions::OpenRemote;
-use superzed_ui;
 
 pub use onboarding_banner::restore_banner;
 
@@ -149,6 +148,7 @@ pub fn init(cx: &mut App) {
 pub struct TitleBar {
     platform_titlebar: Entity<PlatformTitleBar>,
     project: Entity<Project>,
+    superzed_store: Entity<SuperzedStore>,
     user_store: Entity<UserStore>,
     client: Arc<Client>,
     workspace: WeakEntity<Workspace>,
@@ -164,76 +164,7 @@ pub struct TitleBar {
 impl Render for TitleBar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let title_bar_settings = *TitleBarSettings::get_global(cx);
-
         let show_menus = show_menus(cx);
-
-        let mut children = Vec::new();
-
-        children.push(
-            h_flex()
-                .gap_1()
-                .items_center()
-                .map(|title_bar| {
-                    title_bar
-                        .children(self.render_workspace_sidebar_toggle(window, cx))
-                        .child(
-                            Button::new("superzed-header-brand", "Superzed")
-                                .style(ButtonStyle::Tinted(TintColor::Accent))
-                                .icon(IconName::FileTree)
-                                .label_size(LabelSize::Small),
-                        )
-                        .when_some(
-                            self.application_menu.clone().filter(|_| !show_menus),
-                            |title_bar, menu| title_bar.child(menu),
-                        )
-                        .when(title_bar_settings.show_project_items, |title_bar| {
-                            title_bar
-                                .child(self.render_project_name(cx))
-                                .when(title_bar_settings.show_branch_name, |title_bar| {
-                                    title_bar.children(self.render_project_branch(cx))
-                                })
-                        })
-                })
-                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .into_any_element(),
-        );
-
-        children.push(
-            h_flex()
-                .pr_1()
-                .gap_1()
-                .items_center()
-                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(
-                    Button::new("superzed-header-add-project", "Add Repository")
-                        .style(ButtonStyle::Subtle)
-                        .icon(IconName::FolderOpen)
-                        .label_size(LabelSize::Small)
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(Box::new(superzed_ui::AddProject), cx);
-                        }),
-                )
-                .child(
-                    Button::new("superzed-header-new-workspace", "New Workspace")
-                        .style(ButtonStyle::Subtle)
-                        .icon(IconName::Plus)
-                        .label_size(LabelSize::Small)
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(Box::new(superzed_ui::NewWorkspace), cx);
-                        }),
-                )
-                .child(
-                    Button::new("superzed-header-changes", "Changes")
-                        .style(ButtonStyle::Subtle)
-                        .icon(IconName::GitBranchAlt)
-                        .label_size(LabelSize::Small)
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(Box::new(superzed_ui::RevealChanges), cx);
-                        }),
-                )
-                .child(self.update_version.clone())
-                .into_any_element(),
-        );
 
         if show_menus {
             self.platform_titlebar.update(cx, |this, _| {
@@ -256,15 +187,14 @@ impl Render for TitleBar {
                     h_flex()
                         .bg(title_bar_color)
                         .h(height)
-                        .pl_2()
-                        .justify_between()
                         .w_full()
-                        .children(children),
+                        .child(self.render_superzed_header(window, cx, title_bar_settings)),
                 )
                 .into_any_element()
         } else {
+            let header = self.render_superzed_header(window, cx, title_bar_settings);
             self.platform_titlebar.update(cx, |this, _| {
-                this.set_children(children);
+                this.set_children([header]);
             });
             self.platform_titlebar.clone().into_any_element()
         }
@@ -280,6 +210,7 @@ impl TitleBar {
     ) -> Self {
         let project = workspace.project().clone();
         let git_store = project.read(cx).git_store().clone();
+        let superzed_store = SuperzedStore::global(cx);
         let user_store = workspace.app_state().user_store.clone();
         let client = workspace.app_state().client.clone();
         let active_call = ActiveCall::global(cx);
@@ -331,6 +262,7 @@ impl TitleBar {
             }),
         );
         subscriptions.push(cx.observe(&user_store, |_a, _, cx| cx.notify()));
+        subscriptions.push(cx.observe(&superzed_store, |_a, _, cx| cx.notify()));
         if let Some(trusted_worktrees) = TrustedWorktrees::try_get_global(cx) {
             subscriptions.push(cx.subscribe(&trusted_worktrees, |_, _, _, cx| {
                 cx.notify();
@@ -400,6 +332,7 @@ impl TitleBar {
             application_menu,
             workspace: workspace.weak_handle(),
             project,
+            superzed_store,
             user_store,
             client,
             _subscriptions: subscriptions,
@@ -411,6 +344,94 @@ impl TitleBar {
 
     fn worktree_count(&self, cx: &App) -> usize {
         self.project.read(cx).visible_worktrees(cx).count()
+    }
+
+    fn render_superzed_header(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        _title_bar_settings: TitleBarSettings,
+    ) -> AnyElement {
+        let workspace = self.workspace.clone();
+        let is_details_sidebar_open = workspace
+            .upgrade()
+            .is_some_and(|workspace| workspace.read(cx).right_dock().read(cx).is_open());
+        let details_sidebar_icon = if is_details_sidebar_open {
+            IconName::WorkspaceDetailsOpen
+        } else {
+            IconName::WorkspaceDetailsClosed
+        };
+
+        h_flex()
+            .w_full()
+            .h_full()
+            .px_2()
+            .gap_2()
+            .items_center()
+            .justify_between()
+            .child(
+                h_flex()
+                    .w(px(120.))
+                    .items_center()
+                    .gap_1()
+                    .children(self.render_workspace_sidebar_toggle(window, cx)),
+            )
+            .child(
+                h_flex().flex_1().justify_center().px_4().child(
+                    Label::new(self.superzed_header_title(cx))
+                        .size(LabelSize::Small)
+                        .color(Color::Muted)
+                        .truncate(),
+                ),
+            )
+            .child(
+                h_flex()
+                    .w(px(120.))
+                    .justify_end()
+                    .items_center()
+                    .gap_1()
+                    .child(
+                        IconButton::new("superzed-header-toggle-details", details_sidebar_icon)
+                            .shape(ui::IconButtonShape::Square)
+                            .icon_size(IconSize::Small)
+                            .tooltip(move |window, cx| {
+                                if is_details_sidebar_open {
+                                    Tooltip::text("Hide details sidebar")(window, cx)
+                                } else {
+                                    Tooltip::text("Show details sidebar")(window, cx)
+                                }
+                            })
+                            .on_click(move |_, window, cx| {
+                                if let Some(workspace) = workspace.upgrade() {
+                                    workspace.update(cx, |workspace, cx| {
+                                        if workspace.right_dock().read(cx).is_open() {
+                                            workspace.close_panel::<superzed_ui::SuperzedRightSidebar>(
+                                                window, cx,
+                                            );
+                                        } else {
+                                            workspace.open_panel::<superzed_ui::SuperzedRightSidebar>(
+                                                window, cx,
+                                            );
+                                        }
+                                    });
+                                }
+                            }),
+                    ),
+            )
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .into_any_element()
+    }
+
+    fn superzed_header_title(&self, cx: &App) -> SharedString {
+        let store = self.superzed_store.read(cx);
+        match (store.active_project(), store.active_workspace()) {
+            (Some(project), Some(workspace)) if workspace.display_name() != project.name => {
+                format!("{} - {}", project.name, workspace.display_name()).into()
+            }
+            (Some(project), _) => project.name.clone().into(),
+            (_, Some(workspace)) => workspace.display_name().to_string().into(),
+            _ => SharedString::default(),
+        }
     }
 
     fn toggle_update_simulation(&mut self, cx: &mut Context<Self>) {
@@ -688,15 +709,15 @@ impl TitleBar {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let is_sidebar_open = self.platform_titlebar.read(cx).is_workspace_sidebar_open();
-
-        if is_sidebar_open {
-            return None;
-        }
-
         let has_notifications = self.platform_titlebar.read(cx).sidebar_has_notifications();
+        let icon = if is_sidebar_open {
+            IconName::WorkspaceNavOpen
+        } else {
+            IconName::WorkspaceNavClosed
+        };
 
         Some(
-            IconButton::new("toggle-workspace-sidebar", IconName::WorkspaceNavClosed)
+            IconButton::new("toggle-workspace-sidebar", icon)
                 .icon_size(IconSize::Small)
                 .when(has_notifications, |button| {
                     button
@@ -704,7 +725,11 @@ impl TitleBar {
                         .indicator_border_color(Some(cx.theme().colors().title_bar_background))
                 })
                 .tooltip(move |_, cx| {
-                    Tooltip::for_action("Open Workspace Sidebar", &ToggleWorkspaceSidebar, cx)
+                    if is_sidebar_open {
+                        Tooltip::for_action("Hide Workspace Sidebar", &ToggleWorkspaceSidebar, cx)
+                    } else {
+                        Tooltip::for_action("Open Workspace Sidebar", &ToggleWorkspaceSidebar, cx)
+                    }
                 })
                 .on_click(|_, window, cx| {
                     window.dispatch_action(ToggleWorkspaceSidebar.boxed_clone(), cx);

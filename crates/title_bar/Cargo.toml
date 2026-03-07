@@ -59,6 +59,7 @@ util.workspace = true
 workspace.workspace = true
 zed_actions.workspace = true
 superzed_ui.workspace = true
+superzed_model.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows.workspace = true

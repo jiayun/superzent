@@ -65,6 +65,8 @@ pub struct WorkspaceEntry {
     pub project_id: String,
     pub kind: WorkspaceKind,
     pub name: String,
+    #[serde(default)]
+    pub display_name: Option<String>,
     pub branch: String,
     pub worktree_path: PathBuf,
     pub agent_preset_id: String,
@@ -84,6 +86,13 @@ impl WorkspaceEntry {
 
     pub fn is_primary(&self) -> bool {
         self.kind == WorkspaceKind::Primary
+    }
+
+    pub fn display_name(&self) -> &str {
+        self.display_name.as_deref().unwrap_or(match self.kind {
+            WorkspaceKind::Primary => "local",
+            WorkspaceKind::Worktree => &self.name,
+        })
     }
 }
 
@@ -215,19 +224,11 @@ impl SuperzedStore {
     }
 
     pub fn workspaces_for_project(&self, project_id: &str) -> Vec<&WorkspaceEntry> {
-        let mut workspaces = self
-            .state
+        self.state
             .workspaces
             .iter()
             .filter(|workspace| workspace.project_id == project_id)
-            .collect::<Vec<_>>();
-        workspaces.sort_by(|left, right| {
-            left.kind
-                .cmp(&right.kind)
-                .then_with(|| right.last_opened_at.cmp(&left.last_opened_at))
-                .then_with(|| left.name.cmp(&right.name))
-        });
-        workspaces
+            .collect::<Vec<_>>()
     }
 
     pub fn presets(&self) -> &[AgentPreset] {
@@ -257,12 +258,19 @@ impl SuperzedStore {
             .as_deref()
             .and_then(|workspace_id| self.workspace(workspace_id))
             .map(|workspace| workspace.project_id.clone())
-            .or_else(|| self.state.projects.first().map(|project| project.id.clone()));
+            .or_else(|| {
+                self.state
+                    .projects
+                    .first()
+                    .map(|project| project.id.clone())
+            });
         self.persist_and_notify(cx);
     }
 
     pub fn set_active_workspace_by_path(&mut self, path: &Path, cx: &mut Context<Self>) {
-        let workspace_id = self.workspace_for_path(path).map(|workspace| workspace.id.clone());
+        let workspace_id = self
+            .workspace_for_path(path)
+            .map(|workspace| workspace.id.clone());
         self.set_active_workspace(workspace_id, cx);
     }
 
@@ -397,6 +405,31 @@ impl SuperzedStore {
         }
     }
 
+    pub fn set_workspace_display_name(
+        &mut self,
+        workspace_id: &str,
+        display_name: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(workspace) = self
+            .state
+            .workspaces
+            .iter_mut()
+            .find(|workspace| workspace.id == workspace_id)
+        else {
+            return;
+        };
+
+        let display_name = display_name
+            .map(|display_name| display_name.trim().to_string())
+            .filter(|display_name| !display_name.is_empty() && display_name != &workspace.name);
+
+        if workspace.display_name != display_name {
+            workspace.display_name = display_name;
+            self.persist_and_notify(cx);
+        }
+    }
+
     pub fn remove_workspace(
         &mut self,
         workspace_id: &str,
@@ -414,6 +447,115 @@ impl SuperzedStore {
         self.normalize();
         self.persist_and_notify(cx);
         Some(removed)
+    }
+
+    pub fn reorder_workspace(
+        &mut self,
+        dragged_workspace_id: &str,
+        target_workspace_id: Option<&str>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(source_ix) = self
+            .state
+            .workspaces
+            .iter()
+            .position(|workspace| workspace.id == dragged_workspace_id)
+        else {
+            return;
+        };
+
+        let project_id = self.state.workspaces[source_ix].project_id.clone();
+
+        if let Some(target_workspace_id) = target_workspace_id {
+            let Some(target_ix) = self
+                .state
+                .workspaces
+                .iter()
+                .position(|workspace| workspace.id == target_workspace_id)
+            else {
+                return;
+            };
+
+            if source_ix == target_ix
+                || self.state.workspaces[target_ix].project_id != project_id
+            {
+                return;
+            }
+
+            let workspace = self.state.workspaces.remove(source_ix);
+            let Some(insert_ix) = self
+                .state
+                .workspaces
+                .iter()
+                .position(|workspace| workspace.id == target_workspace_id)
+            else {
+                self.state.workspaces.insert(source_ix, workspace);
+                return;
+            };
+            self.state.workspaces.insert(insert_ix, workspace);
+        } else {
+            let workspace = self.state.workspaces.remove(source_ix);
+            let insert_ix = self
+                .state
+                .workspaces
+                .iter()
+                .enumerate()
+                .filter(|(_, workspace)| workspace.project_id == project_id)
+                .map(|(ix, _)| ix + 1)
+                .last()
+                .unwrap_or(self.state.workspaces.len());
+            self.state.workspaces.insert(insert_ix, workspace);
+        }
+
+        self.persist_and_notify(cx);
+    }
+
+    pub fn reorder_project(
+        &mut self,
+        dragged_project_id: &str,
+        target_project_id: Option<&str>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(source_ix) = self
+            .state
+            .projects
+            .iter()
+            .position(|project| project.id == dragged_project_id)
+        else {
+            return;
+        };
+
+        if let Some(target_project_id) = target_project_id {
+            let Some(target_ix) = self
+                .state
+                .projects
+                .iter()
+                .position(|project| project.id == target_project_id)
+            else {
+                return;
+            };
+
+            if source_ix == target_ix {
+                return;
+            }
+
+            let project = self.state.projects.remove(source_ix);
+            let Some(insert_ix) = self
+                .state
+                .projects
+                .iter()
+                .position(|project| project.id == target_project_id)
+            else {
+                self.state.projects.insert(source_ix, project);
+                return;
+            };
+            self.state.projects.insert(insert_ix, project);
+        } else {
+            let project = self.state.projects.remove(source_ix);
+            self.state.projects.push(project);
+        }
+
+        self.persist_and_notify(cx);
     }
 
     pub fn start_session(
@@ -522,17 +664,6 @@ impl SuperzedStore {
     }
 
     fn normalize(&mut self) {
-        self.state
-            .projects
-            .sort_by(|left, right| right.last_opened_at.cmp(&left.last_opened_at));
-        self.state.workspaces.sort_by(|left, right| {
-            left.project_id
-                .cmp(&right.project_id)
-                .then_with(|| left.kind.cmp(&right.kind))
-                .then_with(|| right.last_opened_at.cmp(&left.last_opened_at))
-                .then_with(|| left.name.cmp(&right.name))
-        });
-
         let project_ids = self
             .state
             .projects
@@ -555,7 +686,11 @@ impl SuperzedStore {
             .as_deref()
             .is_some_and(|id| !existing_project_ids.contains(id))
         {
-            self.state.active_project_id = self.state.projects.first().map(|project| project.id.clone());
+            self.state.active_project_id = self
+                .state
+                .projects
+                .first()
+                .map(|project| project.id.clone());
         }
 
         let existing_workspace_ids = self
@@ -570,14 +705,26 @@ impl SuperzedStore {
             .as_deref()
             .is_some_and(|id| !existing_workspace_ids.contains(id))
         {
-            self.state.active_workspace_id = self.state.workspaces.first().map(|workspace| workspace.id.clone());
+            self.state.active_workspace_id = self
+                .state
+                .workspaces
+                .first()
+                .map(|workspace| workspace.id.clone());
         }
 
         if self.state.active_project_id.is_none() {
-            self.state.active_project_id = self.state.projects.first().map(|project| project.id.clone());
+            self.state.active_project_id = self
+                .state
+                .projects
+                .first()
+                .map(|project| project.id.clone());
         }
         if self.state.active_workspace_id.is_none() {
-            self.state.active_workspace_id = self.state.workspaces.first().map(|workspace| workspace.id.clone());
+            self.state.active_workspace_id = self
+                .state
+                .workspaces
+                .first()
+                .map(|workspace| workspace.id.clone());
         }
     }
 
@@ -686,6 +833,7 @@ fn load_legacy_state() -> Option<SuperzedState> {
                 project_id: project_id.clone(),
                 kind: WorkspaceKind::Primary,
                 name: repo_name.clone(),
+                display_name: None,
                 branch: "HEAD".to_string(),
                 worktree_path: repo_root.clone(),
                 agent_preset_id: default_preset_id.clone(),
@@ -702,6 +850,7 @@ fn load_legacy_state() -> Option<SuperzedState> {
             project_id: project_id.clone(),
             kind: WorkspaceKind::Worktree,
             name: task.name,
+            display_name: None,
             branch: task.branch,
             worktree_path: task.worktree_path,
             agent_preset_id: task.agent_preset_id,

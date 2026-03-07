@@ -16613,14 +16613,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "superzed_agent"
-version = "0.1.0"
-dependencies = [
- "superzed_model",
- "task",
-]
-
-[[package]]
 name = "superzed_git"
 version = "0.1.0"
 dependencies = [
@@ -16652,11 +16644,12 @@ name = "superzed_ui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "editor",
  "git_ui",
  "gpui",
+ "menu",
  "project",
  "project_panel",
- "superzed_agent",
  "superzed_git",
  "superzed_model",
  "terminal_view",
@@ -17744,6 +17737,7 @@ dependencies = [
  "settings",
  "smallvec",
  "story",
+ "superzed_model",
  "superzed_ui",
  "telemetry",
  "theme",

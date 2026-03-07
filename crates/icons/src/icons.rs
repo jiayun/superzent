@@ -273,6 +273,8 @@ pub enum IconName {
     WholeWord,
     WorkspaceNavClosed,
     WorkspaceNavOpen,
+    WorkspaceDetailsClosed,
+    WorkspaceDetailsOpen,
     XCircle,
     XCircleFilled,
     ZedAgent,

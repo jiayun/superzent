@@ -255,7 +255,6 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
         Menu {
             name: "Run".into(),
             items: vec![
-                MenuItem::action("Launch Agent", superzed_ui::LaunchAgent),
                 MenuItem::action("Reveal Changes", superzed_ui::RevealChanges),
                 MenuItem::action(
                     "Open Workspace in New Window",
