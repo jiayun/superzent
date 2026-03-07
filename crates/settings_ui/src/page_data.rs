@@ -6164,6 +6164,23 @@ fn terminal_page() -> SettingsPage {
         ]
     }
 
+    fn agent_presets_section() -> [SettingsPageItem; 2] {
+        [
+            SettingsPageItem::SectionHeader("Agent Presets"),
+            SettingsPageItem::SubPageLink(SubPageLink {
+                title: "Manage Agent Presets".into(),
+                r#type: crate::SubPageType::default(),
+                description: Some(
+                    "Configure preset buttons and managed workspace defaults.".into(),
+                ),
+                json_path: Some("terminal.agent_presets"),
+                in_json: false,
+                files: USER,
+                render: crate::pages::render_superzet_agent_presets_page,
+            }),
+        ]
+    }
+
     SettingsPage {
         title: "Terminal",
         items: concat_sections![
@@ -6175,6 +6192,7 @@ fn terminal_page() -> SettingsPage {
             advanced_settings_section(),
             toolbar_section(),
             scrollbar_section(),
+            agent_presets_section(),
         ],
     }
 }
