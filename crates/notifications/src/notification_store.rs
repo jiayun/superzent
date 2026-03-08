@@ -21,7 +21,7 @@ impl Global for GlobalNotificationStore {}
 pub struct NotificationStore {
     client: Arc<Client>,
     user_store: Entity<UserStore>,
-    channel_store: Entity<ChannelStore>,
+    channel_store: Option<Entity<ChannelStore>>,
     notifications: SumTree<NotificationEntry>,
     loaded_all_notifications: bool,
     _watch_connection_status: Task<Option<()>>,
@@ -92,7 +92,7 @@ impl NotificationStore {
         });
 
         Self {
-            channel_store: ChannelStore::global(cx),
+            channel_store: ChannelStore::try_global(cx),
             notifications: Default::default(),
             loaded_all_notifications: false,
             _watch_connection_status: watch_connection_status,
@@ -363,11 +363,17 @@ impl NotificationStore {
                     .detach();
             }
             Notification::ChannelInvitation { channel_id, .. } => {
-                self.channel_store
-                    .update(cx, |store, cx| {
-                        store.respond_to_channel_invite(ChannelId(channel_id), response, cx)
-                    })
-                    .detach();
+                if let Some(channel_store) = &self.channel_store {
+                    channel_store
+                        .update(cx, |store, cx| {
+                            store.respond_to_channel_invite(ChannelId(channel_id), response, cx)
+                        })
+                        .detach();
+                } else {
+                    log::warn!(
+                        "Ignoring channel invitation response without an initialized channel store"
+                    );
+                }
             }
             _ => {}
         }

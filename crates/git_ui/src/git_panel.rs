@@ -9,9 +9,11 @@ use crate::{
     file_history_view::FileHistoryView, git_panel_settings::GitPanelSettings, git_status_icon,
     repository_selector::RepositorySelector,
 };
+#[cfg(feature = "ai")]
 use agent_settings::AgentSettings;
 use anyhow::Context as _;
 use askpass::AskPassDelegate;
+#[cfg(feature = "ai")]
 use cloud_llm_client::CompletionIntent;
 use collections::{BTreeMap, HashMap, HashSet};
 use db::kvp::KEY_VALUE_STORE;
@@ -20,11 +22,12 @@ use editor::{
     actions::ExpandAllDiffHunks,
 };
 use editor::{EditorStyle, RewrapOptions};
+#[cfg(feature = "ai")]
 use futures::StreamExt as _;
 use git::commit::ParsedCommitMessage;
 use git::repository::{
-    Branch, CommitDetails, CommitOptions, CommitSummary, DiffType, FetchOptions, PushOptions,
-    Remote, RemoteCommandOutput, ResetMode, Upstream, UpstreamTracking, UpstreamTrackingStatus,
+    Branch, CommitDetails, CommitOptions, CommitSummary, FetchOptions, PushOptions, Remote,
+    RemoteCommandOutput, ResetMode, Upstream, UpstreamTracking, UpstreamTrackingStatus,
 };
 use git::stash::GitStash;
 use git::status::{DiffStat, StageStatus};
@@ -41,6 +44,9 @@ use gpui::{
 };
 use itertools::Itertools;
 use language::{Buffer, File};
+#[cfg(feature = "ai")]
+use git::repository::DiffType;
+#[cfg(feature = "ai")]
 use language_model::{
     ConfiguredModel, LanguageModelRegistry, LanguageModelRequest, LanguageModelRequestMessage, Role,
 };
@@ -53,6 +59,7 @@ use project::{
     git_store::{GitStoreEvent, Repository, RepositoryEvent, RepositoryId, pending_op},
     project_settings::{GitPathStyle, ProjectSettings},
 };
+#[cfg(feature = "ai")]
 use prompt_store::{BuiltInPrompt, PromptId, PromptStore, RULES_FILE_NAMES};
 use proto::RpcError;
 use serde::{Deserialize, Serialize};
@@ -65,13 +72,17 @@ use std::{sync::Arc, time::Duration, usize};
 use strum::{IntoEnumIterator, VariantNames};
 use theme::ThemeSettings;
 use time::OffsetDateTime;
+#[cfg(feature = "ai")]
+use ui::CommonAnimationExt;
 use ui::{
-    ButtonLike, Checkbox, CommonAnimationExt, ContextMenu, ElevationIndex, IndentGuideColors,
-    PopoverMenu, RenderedIndentGuide, ScrollAxes, Scrollbars, SplitButton, Tooltip, WithScrollbar,
-    prelude::*,
+    ButtonLike, Checkbox, ContextMenu, ElevationIndex, IndentGuideColors, PopoverMenu,
+    RenderedIndentGuide, ScrollAxes, Scrollbars, SplitButton, Tooltip, WithScrollbar, prelude::*,
 };
 use util::paths::PathStyle;
-use util::{ResultExt, TryFutureExt, maybe, rel_path::RelPath};
+use util::{ResultExt, TryFutureExt, maybe};
+
+#[cfg(any(feature = "ai", test))]
+use util::rel_path::RelPath;
 use workspace::SERIALIZATION_THROTTLE_TIME;
 use workspace::{
     Workspace,
@@ -659,6 +670,38 @@ struct BulkStaging {
 
 const MAX_PANEL_EDITOR_LINES: usize = 6;
 
+fn ai_enabled(cx: &App) -> bool {
+    #[cfg(feature = "ai")]
+    {
+        agent_settings::AgentSettings::get_global(cx).enabled(cx)
+    }
+
+    #[cfg(not(feature = "ai"))]
+    {
+        let _ = cx;
+        false
+    }
+}
+
+fn observe_ai_settings(cx: &mut Context<GitPanel>) -> Subscription {
+    #[cfg(feature = "ai")]
+    {
+        let mut was_ai_enabled = agent_settings::AgentSettings::get_global(cx).enabled(cx);
+        cx.observe_global::<SettingsStore>(move |_, cx| {
+            let is_ai_enabled = agent_settings::AgentSettings::get_global(cx).enabled(cx);
+            if was_ai_enabled != is_ai_enabled {
+                was_ai_enabled = is_ai_enabled;
+                cx.notify();
+            }
+        })
+    }
+
+    #[cfg(not(feature = "ai"))]
+    {
+        cx.observe_global::<SettingsStore>(|_, _| {})
+    }
+}
+
 pub(crate) fn commit_message_editor(
     commit_message_buffer: Entity<Buffer>,
     placeholder: Option<SharedString>,
@@ -744,14 +787,7 @@ impl GitPanel {
 
             let scroll_handle = UniformListScrollHandle::new();
 
-            let mut was_ai_enabled = AgentSettings::get_global(cx).enabled(cx);
-            let _settings_subscription = cx.observe_global::<SettingsStore>(move |_, cx| {
-                let is_ai_enabled = AgentSettings::get_global(cx).enabled(cx);
-                if was_ai_enabled != is_ai_enabled {
-                    was_ai_enabled = is_ai_enabled;
-                    cx.notify();
-                }
-            });
+            let _settings_subscription = observe_ai_settings(cx);
 
             cx.subscribe_in(
                 &git_store,
@@ -2571,6 +2607,7 @@ impl GitPanel {
         compressed
     }
 
+    #[cfg(feature = "ai")]
     async fn load_project_rules(
         project: &Entity<Project>,
         repo_work_dir: &Arc<Path>,
@@ -2617,6 +2654,7 @@ impl GitPanel {
         }
     }
 
+    #[cfg(feature = "ai")]
     async fn load_commit_message_prompt(cx: &mut AsyncApp) -> String {
         let load = async {
             let store = cx.update(|cx| PromptStore::global(cx)).await.ok()?;
@@ -2632,8 +2670,9 @@ impl GitPanel {
     }
 
     /// Generates a commit message using an LLM.
+    #[cfg(feature = "ai")]
     pub fn generate_commit_message(&mut self, cx: &mut Context<Self>) {
-        if !self.can_commit() || !AgentSettings::get_global(cx).enabled(cx) {
+        if !self.can_commit() || !ai_enabled(cx) {
             return;
         }
 
@@ -2779,6 +2818,11 @@ impl GitPanel {
             }
             .log_err().await
         }));
+    }
+
+    #[cfg(not(feature = "ai"))]
+    pub fn generate_commit_message(&mut self, cx: &mut Context<Self>) {
+        let _ = cx;
     }
 
     fn get_fetch_options(
@@ -3822,11 +3866,12 @@ impl GitPanel {
             .anchor(Corner::TopRight)
     }
 
+    #[cfg(feature = "ai")]
     pub(crate) fn render_generate_commit_message_button(
         &self,
         cx: &Context<Self>,
     ) -> Option<AnyElement> {
-        if !agent_settings::AgentSettings::get_global(cx).enabled(cx) {
+        if !ai_enabled(cx) {
             return None;
         }
 
@@ -3849,7 +3894,7 @@ impl GitPanel {
             );
         }
 
-        let model_registry = LanguageModelRegistry::read_global(cx);
+        let model_registry = language_model::LanguageModelRegistry::read_global(cx);
         let has_commit_model_configuration_error = model_registry
             .configuration_error(model_registry.commit_message_model(), cx)
             .is_some();
@@ -3885,6 +3930,15 @@ impl GitPanel {
                 }))
                 .into_any_element(),
         )
+    }
+
+    #[cfg(not(feature = "ai"))]
+    pub(crate) fn render_generate_commit_message_button(
+        &self,
+        cx: &Context<Self>,
+    ) -> Option<AnyElement> {
+        let _ = cx;
+        None
     }
 
     fn render_git_commit_menu(

@@ -9,6 +9,7 @@ license = "GPL-3.0-or-later"
 workspace = true
 
 [features]
+assistant = ["dep:assistant_slash_command"]
 test-support = ["editor/test-support", "gpui/test-support"]
 
 [lib]
@@ -18,7 +19,7 @@ doctest = false
 [dependencies]
 anyhow.workspace = true
 async-recursion.workspace = true
-assistant_slash_command.workspace = true
+assistant_slash_command = { workspace = true, optional = true }
 breadcrumbs.workspace = true
 collections.workspace = true
 db.workspace = true

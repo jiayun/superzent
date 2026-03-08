@@ -1,5 +1,6 @@
 mod application_menu;
 #[allow(dead_code)]
+#[cfg(feature = "calls")]
 pub mod collab;
 mod onboarding_banner;
 mod plan_chip;
@@ -24,7 +25,6 @@ use crate::application_menu::{
 };
 
 use auto_update::AutoUpdateStatus;
-use call::ActiveCall;
 use client::{Client, UserStore, zed_urls};
 use cloud_api_types::Plan;
 use gpui::{
@@ -43,9 +43,11 @@ use superzet_ui;
 use theme::ActiveTheme;
 use title_bar_settings::TitleBarSettings;
 use ui::{
-    Avatar, ButtonLike, ContextMenu, IconWithIndicator, Indicator, PopoverMenu, PopoverMenuHandle,
-    TintColor, Tooltip, prelude::*, utils::platform_title_bar_height,
+    Avatar, ButtonLike, ContextMenu, IconWithIndicator, Indicator, PopoverMenu, TintColor,
+    Tooltip, prelude::*, utils::platform_title_bar_height,
 };
+#[cfg(feature = "calls")]
+use ui::PopoverMenuHandle;
 use update_version::UpdateVersion;
 use util::ResultExt;
 use workspace::{
@@ -160,6 +162,7 @@ pub struct TitleBar {
     #[allow(dead_code)]
     banner: Entity<OnboardingBanner>,
     update_version: Entity<UpdateVersion>,
+    #[cfg(feature = "calls")]
     #[allow(dead_code)]
     screen_share_popover_handle: PopoverMenuHandle<ContextMenu>,
 }
@@ -216,8 +219,6 @@ impl TitleBar {
         let superzet_store = SuperzetStore::global(cx);
         let user_store = workspace.app_state().user_store.clone();
         let client = workspace.app_state().client.clone();
-        let active_call = ActiveCall::global(cx);
-
         let platform_style = PlatformStyle::platform();
         let application_menu = match platform_style {
             PlatformStyle::Mac => {
@@ -248,7 +249,11 @@ impl TitleBar {
                 }
             }),
         );
-        subscriptions.push(cx.observe(&active_call, |this, _, cx| this.active_call_changed(cx)));
+        #[cfg(feature = "calls")]
+        {
+            let active_call = call::ActiveCall::global(cx);
+            subscriptions.push(cx.observe(&active_call, |this, _, cx| this.active_call_changed(cx)));
+        }
         subscriptions.push(cx.observe_window_activation(window, Self::window_activation_changed));
         subscriptions.push(
             cx.subscribe(&git_store, move |this, _, event, cx| match event {
@@ -344,6 +349,7 @@ impl TitleBar {
             _subscriptions: subscriptions,
             banner,
             update_version,
+            #[cfg(feature = "calls")]
             screen_share_popover_handle: PopoverMenuHandle::default(),
         }
     }
@@ -886,14 +892,17 @@ impl TitleBar {
     }
 
     fn window_activation_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if window.is_window_active() {
-            ActiveCall::global(cx)
-                .update(cx, |call, cx| call.set_location(Some(&self.project), cx))
-                .detach_and_log_err(cx);
-        } else if cx.active_window().is_none() {
-            ActiveCall::global(cx)
-                .update(cx, |call, cx| call.set_location(None, cx))
-                .detach_and_log_err(cx);
+        #[cfg(feature = "calls")]
+        {
+            if window.is_window_active() {
+                call::ActiveCall::global(cx)
+                    .update(cx, |call, cx| call.set_location(Some(&self.project), cx))
+                    .detach_and_log_err(cx);
+            } else if cx.active_window().is_none() {
+                call::ActiveCall::global(cx)
+                    .update(cx, |call, cx| call.set_location(None, cx))
+                    .detach_and_log_err(cx);
+            }
         }
         self.workspace
             .update(cx, |workspace, cx| {
@@ -902,26 +911,33 @@ impl TitleBar {
             .ok();
     }
 
+    #[cfg(feature = "calls")]
     fn active_call_changed(&mut self, cx: &mut Context<Self>) {
         cx.notify();
     }
 
     #[allow(dead_code)]
-    fn share_project(&mut self, cx: &mut Context<Self>) {
-        let active_call = ActiveCall::global(cx);
-        let project = self.project.clone();
-        active_call
-            .update(cx, |call, cx| call.share_project(project, cx))
-            .detach_and_log_err(cx);
+    fn share_project(&mut self, _cx: &mut Context<Self>) {
+        #[cfg(feature = "calls")]
+        {
+            let active_call = call::ActiveCall::global(_cx);
+            let project = self.project.clone();
+            active_call
+                .update(_cx, |call, cx| call.share_project(project, cx))
+                .detach_and_log_err(_cx);
+        }
     }
 
     #[allow(dead_code)]
-    fn unshare_project(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        let active_call = ActiveCall::global(cx);
-        let project = self.project.clone();
-        active_call
-            .update(cx, |call, cx| call.unshare_project(project, cx))
-            .log_err();
+    fn unshare_project(&mut self, _: &mut Window, _cx: &mut Context<Self>) {
+        #[cfg(feature = "calls")]
+        {
+            let active_call = call::ActiveCall::global(_cx);
+            let project = self.project.clone();
+            active_call
+                .update(_cx, |call, cx| call.unshare_project(project, cx))
+                .log_err();
+        }
     }
 
     #[allow(dead_code)]

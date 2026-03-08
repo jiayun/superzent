@@ -38,7 +38,6 @@ use workspace::{
 };
 
 use anyhow::{Result, anyhow};
-use zed_actions::assistant::InlineAssist;
 
 const TERMINAL_PANEL_KEY: &str = "TerminalPanel";
 
@@ -113,21 +112,32 @@ impl TerminalPanel {
     }
 
     pub fn set_assistant_enabled(&mut self, enabled: bool, cx: &mut Context<Self>) {
-        self.assistant_enabled = enabled;
-        if enabled {
-            let focus_handle = self
-                .active_pane
-                .read(cx)
-                .active_item()
-                .map(|item| item.item_focus_handle(cx))
-                .unwrap_or(self.focus_handle(cx));
-            self.assistant_tab_bar_button = Some(
-                cx.new(move |_| InlineAssistTabBarButton { focus_handle })
-                    .into(),
-            );
-        } else {
+        #[cfg(feature = "assistant")]
+        {
+            self.assistant_enabled = enabled;
+            if enabled {
+                let focus_handle = self
+                    .active_pane
+                    .read(cx)
+                    .active_item()
+                    .map(|item| item.item_focus_handle(cx))
+                    .unwrap_or(self.focus_handle(cx));
+                self.assistant_tab_bar_button = Some(
+                    cx.new(move |_| InlineAssistTabBarButton { focus_handle })
+                        .into(),
+                );
+            } else {
+                self.assistant_tab_bar_button = None;
+            }
+        }
+
+        #[cfg(not(feature = "assistant"))]
+        {
+            let _ = enabled;
+            self.assistant_enabled = false;
             self.assistant_tab_bar_button = None;
         }
+
         for pane in self.center.panes() {
             self.apply_tab_bar_buttons(pane, cx);
         }
@@ -1702,12 +1712,16 @@ impl workspace::TerminalProvider for TerminalProvider {
     }
 }
 
+#[cfg(feature = "assistant")]
 struct InlineAssistTabBarButton {
     focus_handle: FocusHandle,
 }
 
+#[cfg(feature = "assistant")]
 impl Render for InlineAssistTabBarButton {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        use zed_actions::assistant::InlineAssist;
+
         let focus_handle = self.focus_handle.clone();
         IconButton::new("terminal_inline_assistant", IconName::ZedAssistant)
             .icon_size(IconSize::Small)

@@ -188,6 +188,10 @@ impl SuperzetStore {
         cx.global::<GlobalSuperzetStore>().0.clone()
     }
 
+    pub fn try_global(cx: &App) -> Option<Entity<Self>> {
+        cx.try_global::<GlobalSuperzetStore>().map(|store| store.0.clone())
+    }
+
     pub fn projects(&self) -> &[ProjectEntry] {
         &self.state.projects
     }

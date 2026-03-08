@@ -1,4 +1,5 @@
 mod app_menus;
+#[cfg(feature = "ai")]
 pub mod edit_prediction_registry;
 #[cfg(target_os = "macos")]
 pub(crate) mod mac_only_instance;
@@ -13,11 +14,9 @@ pub mod visual_tests;
 #[cfg(target_os = "windows")]
 pub(crate) mod windows_only_instance;
 
-use agent_ui::{AgentDiffToolbar, AgentPanelDelegate};
 use anyhow::Context as _;
 pub use app_menus::*;
 use assets::Assets;
-use audio::{AudioSettings, REPLAY_DURATION};
 use breadcrumbs::Breadcrumbs;
 use client::zed_urls;
 use collections::VecDeque;
@@ -32,10 +31,10 @@ use git_ui::commit_view::CommitViewToolbar;
 use git_ui::git_panel::GitPanel;
 use git_ui::project_diff::{BranchDiffToolbar, ProjectDiffToolbar};
 use gpui::{
-    Action, App, AppContext as _, AsyncWindowContext, Context, DismissEvent, Element, Entity,
-    Focusable, KeyBinding, ParentElement, PathPromptOptions, PromptLevel, ReadGlobal, SharedString,
-    Task, TitlebarOptions, UpdateGlobal, WeakEntity, Window, WindowHandle, WindowKind,
-    WindowOptions, actions, image_cache, point, px, retain_all,
+    Action, App, AppContext as _, Context, DismissEvent, Element, Entity, Focusable, KeyBinding,
+    ParentElement, PathPromptOptions, PromptLevel, ReadGlobal, SharedString, Task,
+    TitlebarOptions, UpdateGlobal, Window, WindowHandle, WindowKind, WindowOptions, actions,
+    image_cache, point, px, retain_all,
 };
 use image_viewer::ImageInfo;
 use language::Capability;
@@ -53,9 +52,8 @@ use paths::{
     local_debug_file_relative_path, local_settings_file_relative_path,
     local_tasks_file_relative_path,
 };
-use project::{DirectoryLister, DisableAiSettings, ProjectItem};
+use project::{DirectoryLister, ProjectItem};
 use project_panel::ProjectPanel;
-use prompt_store::PromptBuilder;
 use quick_action_bar::QuickActionBar;
 use recent_projects::open_remote_project;
 use release_channel::{AppCommitSha, AppVersion, ReleaseChannel};
@@ -67,7 +65,6 @@ use settings::{
     initial_local_debug_tasks_content, initial_project_settings_content, initial_tasks_content,
     update_settings_file,
 };
-use std::time::Duration;
 use std::{
     borrow::Cow,
     path::{Path, PathBuf},
@@ -84,23 +81,41 @@ use util::{ResultExt, asset_str, maybe};
 use uuid::Uuid;
 use vim_mode_setting::VimModeSetting;
 use workspace::notifications::{
-    NotificationId, SuppressEvent, dismiss_app_notification, show_app_notification,
+    NotificationId, dismiss_app_notification, show_app_notification,
 };
 
 use workspace::{
-    AppState, MultiWorkspace, NewFile, NewWindow, OpenLog, Panel, Toast, Workspace,
+    AppState, MultiWorkspace, NewFile, NewWindow, OpenLog, Toast, Workspace,
     WorkspaceSettings, create_and_open_local_file,
     notifications::simple_message_notification::MessageNotification, open_new,
 };
 use workspace::{
-    CloseIntent, CloseProject, CloseWindow, NotificationFrame, RestoreBanner,
-    with_active_or_new_workspace,
+    CloseIntent, CloseProject, CloseWindow, RestoreBanner, with_active_or_new_workspace,
 };
 use workspace::{Pane, notifications::DetachAndPromptErr};
 use zed_actions::{
     OpenAccountSettings, OpenBrowser, OpenDocs, OpenServerSettings, OpenSettingsFile, OpenZedUrl,
     Quit,
 };
+
+#[cfg(feature = "ai")]
+use agent_ui::{AgentDiffToolbar, AgentPanelDelegate};
+#[cfg(feature = "ai")]
+use gpui::{AsyncWindowContext, WeakEntity};
+#[cfg(feature = "calls")]
+use audio::{AudioSettings, REPLAY_DURATION};
+#[cfg(feature = "ai")]
+use project::DisableAiSettings;
+#[cfg(feature = "calls")]
+use std::time::Duration;
+#[cfg(feature = "calls")]
+use workspace::notifications::SuppressEvent;
+#[cfg(feature = "ai")]
+use workspace::Panel;
+#[cfg(feature = "calls")]
+use workspace::NotificationFrame;
+#[cfg(any(feature = "ai", test, feature = "test-support"))]
+use prompt_store::PromptBuilder;
 
 actions!(
     zed,
@@ -357,11 +372,7 @@ pub fn build_window_options(display_uuid: Option<Uuid>, cx: &mut App) -> WindowO
     }
 }
 
-pub fn initialize_workspace(
-    app_state: Arc<AppState>,
-    prompt_builder: Arc<PromptBuilder>,
-    cx: &mut App,
-) {
+pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
     let mut _on_close_subscription = bind_on_window_closed(cx);
     cx.observe_global::<SettingsStore>(move |cx| {
         // A 1.92 regression causes unused-assignment to trigger on this variable.
@@ -435,7 +446,9 @@ pub fn initialize_workspace(
             crashes::set_gpu_info(specs);
         }
 
+        #[cfg(feature = "ai")]
         let edit_prediction_menu_handle = PopoverMenuHandle::default();
+        #[cfg(feature = "ai")]
         let edit_prediction_ui = cx.new(|cx| {
             edit_prediction_ui::EditPredictionButton::new(
                 app_state.fs.clone(),
@@ -445,6 +458,7 @@ pub fn initialize_workspace(
                 cx,
             )
         });
+        #[cfg(feature = "ai")]
         workspace.register_action({
             move |_, _: &edit_prediction_ui::ToggleMenu, window, cx| {
                 edit_prediction_menu_handle.toggle(window, cx);
@@ -487,6 +501,7 @@ pub fn initialize_workspace(
             status_bar.add_left_item(lsp_button, window, cx);
             status_bar.add_left_item(diagnostic_summary, window, cx);
             status_bar.add_left_item(activity_indicator, window, cx);
+            #[cfg(feature = "ai")]
             status_bar.add_right_item(edit_prediction_ui, window, cx);
             status_bar.add_right_item(active_buffer_encoding, window, cx);
             status_bar.add_right_item(active_buffer_language, window, cx);
@@ -497,7 +512,7 @@ pub fn initialize_workspace(
             status_bar.add_right_item(image_info, window, cx);
         });
 
-        let panels_task = initialize_panels(prompt_builder.clone(), window, cx);
+        let panels_task = initialize_panels(window, cx);
         workspace.set_panels_task(panels_task);
         register_actions(app_state.clone(), workspace, window, cx);
 
@@ -618,11 +633,7 @@ fn show_software_emulation_warning_if_needed(
     }
 }
 
-fn initialize_panels(
-    _prompt_builder: Arc<PromptBuilder>,
-    window: &mut Window,
-    cx: &mut Context<Workspace>,
-) -> Task<anyhow::Result<()>> {
+fn initialize_panels(window: &mut Window, cx: &mut Context<Workspace>) -> Task<anyhow::Result<()>> {
     cx.spawn_in(window, async move |workspace_handle, cx| {
         let project_panel = ProjectPanel::load(workspace_handle.clone(), cx.clone());
         let outline_panel = OutlinePanel::load(workspace_handle.clone(), cx.clone());
@@ -668,6 +679,7 @@ fn initialize_panels(
     })
 }
 
+#[cfg(feature = "ai")]
 #[allow(dead_code)]
 fn setup_or_teardown_ai_panel<P: Panel>(
     workspace: &mut Workspace,
@@ -705,6 +717,7 @@ fn setup_or_teardown_ai_panel<P: Panel>(
     }
 }
 
+#[cfg(feature = "ai")]
 #[allow(dead_code)]
 async fn initialize_agent_panel(
     workspace_handle: WeakEntity<Workspace>,
@@ -1112,9 +1125,12 @@ fn register_actions(
                 }
             }
         })
-        .register_action(|workspace, _: &CaptureRecentAudio, window, cx| {
-            capture_recent_audio(workspace, window, cx);
-        });
+        ;
+
+    #[cfg(feature = "calls")]
+    workspace.register_action(|workspace, _: &CaptureRecentAudio, window, cx| {
+        capture_recent_audio(workspace, window, cx);
+    });
 
     #[cfg(not(target_os = "windows"))]
     workspace.register_action(install_cli);
@@ -1186,8 +1202,11 @@ fn initialize_pane(
             toolbar.add_item(lsp_log_item, window, cx);
             let dap_log_item = cx.new(|_| debugger_tools::DapLogToolbarItemView::new());
             toolbar.add_item(dap_log_item, window, cx);
-            let acp_tools_item = cx.new(|_| acp_tools::AcpToolsToolbarItemView::new());
-            toolbar.add_item(acp_tools_item, window, cx);
+            #[cfg(feature = "ai")]
+            {
+                let acp_tools_item = cx.new(|_| acp_tools::AcpToolsToolbarItemView::new());
+                toolbar.add_item(acp_tools_item, window, cx);
+            }
             let telemetry_log_item =
                 cx.new(|cx| telemetry_log::TelemetryLogToolbarItemView::new(window, cx));
             toolbar.add_item(telemetry_log_item, window, cx);
@@ -1205,8 +1224,11 @@ fn initialize_pane(
             toolbar.add_item(branch_diff_toolbar, window, cx);
             let commit_view_toolbar = cx.new(|_| CommitViewToolbar::new());
             toolbar.add_item(commit_view_toolbar, window, cx);
-            let agent_diff_toolbar = cx.new(AgentDiffToolbar::new);
-            toolbar.add_item(agent_diff_toolbar, window, cx);
+            #[cfg(feature = "ai")]
+            {
+                let agent_diff_toolbar = cx.new(AgentDiffToolbar::new);
+                toolbar.add_item(agent_diff_toolbar, window, cx);
+            }
             let basedpyright_banner = cx.new(|cx| BasedPyrightBanner::new(workspace, cx));
             toolbar.add_item(basedpyright_banner, window, cx);
             let image_view_toolbar = cx.new(|_| image_viewer::ImageViewToolbarControls::new());
@@ -1819,19 +1841,35 @@ pub fn load_default_keymap(cx: &mut App) {
         return;
     }
 
-    cx.bind_keys(
-        KeymapFile::load_asset(DEFAULT_KEYMAP_PATH, Some(KeybindSource::Default), cx).unwrap(),
-    );
+    cx.bind_keys(load_built_in_keymap(
+        DEFAULT_KEYMAP_PATH,
+        KeybindSource::Default,
+        cx,
+    ));
 
     if let Some(asset_path) = base_keymap.asset_path() {
-        cx.bind_keys(KeymapFile::load_asset(asset_path, Some(KeybindSource::Base), cx).unwrap());
+        cx.bind_keys(load_built_in_keymap(asset_path, KeybindSource::Base, cx));
     }
 
     if VimModeSetting::get_global(cx).0 || vim_mode_setting::HelixModeSetting::get_global(cx).0 {
-        cx.bind_keys(
-            KeymapFile::load_asset(VIM_KEYMAP_PATH, Some(KeybindSource::Vim), cx).unwrap(),
-        );
+        cx.bind_keys(load_built_in_keymap(VIM_KEYMAP_PATH, KeybindSource::Vim, cx));
     }
+}
+
+fn load_built_in_keymap(asset_path: &str, source: KeybindSource, cx: &App) -> Vec<KeyBinding> {
+    // Lite and other partial feature builds intentionally omit action registries that still exist
+    // in the upstream default keymaps. In those builds we keep the valid bindings and skip the rest.
+    let mut key_bindings = if cfg!(feature = "full") {
+        KeymapFile::load_asset(asset_path, None, cx).unwrap()
+    } else {
+        KeymapFile::load_asset_allow_partial_failure(asset_path, cx).unwrap()
+    };
+
+    for key_binding in &mut key_bindings {
+        key_binding.set_meta(source.meta());
+    }
+
+    key_bindings
 }
 
 pub fn open_new_ssh_project_from_project(
@@ -2090,6 +2128,7 @@ fn open_settings_file(
     .detach_and_log_err(cx);
 }
 
+#[cfg(feature = "calls")]
 fn capture_recent_audio(workspace: &mut Workspace, _: &mut Window, cx: &mut Context<Workspace>) {
     struct CaptureRecentAudioNotification {
         focus_handle: gpui::FocusHandle,

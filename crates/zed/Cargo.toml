@@ -12,8 +12,37 @@ default-run = "superzet"
 workspace = true
 
 [features]
+# Default local builds stay on the lightweight single-user shell surface.
+# Use `--features full` to opt back into the upstream-like AI/collab stack.
+default = ["lite"]
+lite = []
+calls = ["dep:audio", "dep:call", "title_bar/calls"]
+collab = ["calls", "dep:channel", "dep:collab_ui"]
+ai = [
+    "dep:acp_thread",
+    "dep:acp_tools",
+    "dep:agent",
+    "dep:agent-client-protocol",
+    "dep:agent_settings",
+    "dep:agent_ui",
+    "dep:codestral",
+    "dep:copilot",
+    "dep:copilot_chat",
+    "dep:copilot_ui",
+    "dep:edit_prediction",
+    "dep:edit_prediction_ui",
+    "dep:language_model",
+    "dep:language_models",
+    "dep:web_search_providers",
+    "git_ui/ai",
+    "language_tools/edit-prediction",
+    "settings_ui/ai",
+    "terminal_view/assistant",
+]
+full = ["ai", "collab"]
 tracy = ["ztracing/tracy"]
 test-support = [
+    "full",
     "gpui/test-support",
     "gpui_platform/screen-capture",
     "dep:image",
@@ -28,6 +57,7 @@ test-support = [
     "title_bar/test-support",
 ]
 visual-tests = [
+    "full",
     "gpui/test-support",
     "gpui_platform/screen-capture",
     "gpui_platform/test-support",
@@ -35,6 +65,7 @@ visual-tests = [
     "dep:tempfile",
     "dep:action_log",
     "dep:agent_servers",
+    "dep:sidebar",
     "settings_ui/test-support",
     "workspace/test-support",
     "project/test-support",
@@ -63,34 +94,34 @@ path = "src/visual_test_runner.rs"
 required-features = ["visual-tests"]
 
 [dependencies]
-acp_tools.workspace = true
+acp_tools = { workspace = true, optional = true }
 activity_indicator.workspace = true
-agent.workspace = true
-agent-client-protocol.workspace = true
-agent_settings.workspace = true
-agent_ui.workspace = true
+agent = { workspace = true, optional = true }
+agent-client-protocol = { workspace = true, optional = true }
+agent_settings = { workspace = true, optional = true }
+agent_ui = { workspace = true, optional = true }
 anyhow.workspace = true
 askpass.workspace = true
 assets.workspace = true
-audio.workspace = true
+audio = { workspace = true, optional = true }
 auto_update.workspace = true
 auto_update_ui.workspace = true
 breadcrumbs.workspace = true
-call.workspace = true
+call = { workspace = true, optional = true }
 chrono.workspace = true
-channel.workspace = true
+channel = { workspace = true, optional = true }
 clap.workspace = true
 cli.workspace = true
 client.workspace = true
-codestral.workspace = true
-collab_ui.workspace = true
+codestral = { workspace = true, optional = true }
+collab_ui = { workspace = true, optional = true }
 collections.workspace = true
 command_palette.workspace = true
 component.workspace = true
 component_preview.workspace = true
-copilot.workspace = true
-copilot_chat.workspace = true
-copilot_ui.workspace = true
+copilot = { workspace = true, optional = true }
+copilot_chat = { workspace = true, optional = true }
+copilot_ui = { workspace = true, optional = true }
 crashes.workspace = true
 csv_preview.workspace = true
 dap_adapters.workspace = true
@@ -123,14 +154,14 @@ image = { workspace = true, optional = true }
 semver.workspace = true
 tempfile = { workspace = true, optional = true }
 clock = { workspace = true, optional = true }
-acp_thread.workspace = true
+acp_thread = { workspace = true, optional = true }
 action_log = { workspace = true, optional = true }
 agent_servers = { workspace = true, optional = true }
 gpui_tokio.workspace = true
 rayon.workspace = true
 
-edit_prediction.workspace = true
-edit_prediction_ui.workspace = true
+edit_prediction = { workspace = true, optional = true }
+edit_prediction_ui = { workspace = true, optional = true }
 http_client.workspace = true
 image_viewer.workspace = true
 inspector_ui.workspace = true
@@ -140,8 +171,8 @@ json_schema_store.workspace = true
 keymap_editor.workspace = true
 language.workspace = true
 language_extension.workspace = true
-language_model.workspace = true
-language_models.workspace = true
+language_model = { workspace = true, optional = true }
+language_models = { workspace = true, optional = true }
 language_onboarding.workspace = true
 language_selector.workspace = true
 language_tools.workspace = true
@@ -184,7 +215,7 @@ settings.workspace = true
 settings_profile_selector.workspace = true
 settings_ui.workspace = true
 shellexpand.workspace = true
-sidebar.workspace = true
+sidebar = { workspace = true, optional = true }
 smol.workspace = true
 snippet_provider.workspace = true
 snippets_ui.workspace = true
@@ -217,7 +248,7 @@ vim.workspace = true
 vim_mode_setting.workspace = true
 watch.workspace = true
 web_search.workspace = true
-web_search_providers.workspace = true
+web_search_providers = { workspace = true, optional = true }
 which_key.workspace = true
 workspace.workspace = true
 zed_actions.workspace = true

@@ -5,7 +5,6 @@ use crate::{
     remote_button::{render_publish_button, render_push_button},
     resolve_active_repository,
 };
-use agent_settings::AgentSettings;
 use anyhow::{Context as _, Result, anyhow};
 use buffer_diff::{BufferDiff, DiffHunkSecondaryStatus};
 use collections::{HashMap, HashSet};
@@ -15,8 +14,6 @@ use editor::{
     multibuffer_context_lines,
     scroll::Autoscroll,
 };
-use git::repository::DiffType;
-
 use git::{
     Commit, StageAll, StageAndNext, ToggleStaged, UnstageAll, UnstageAndNext,
     repository::{Branch, RepoPath, Upstream, UpstreamTracking, UpstreamTrackingStatus},
@@ -49,8 +46,10 @@ use workspace::{
     notifications::NotifyTaskExt,
     searchable::SearchableItemHandle,
 };
-use zed_actions::agent::ReviewBranchDiff;
 use ztracing::instrument;
+
+#[cfg(feature = "ai")]
+use git::repository::DiffType;
 
 actions!(
     git,
@@ -148,6 +147,17 @@ impl ProjectDiff {
     }
 
     fn review_diff(&mut self, _: &ReviewDiff, window: &mut Window, cx: &mut Context<Self>) {
+        #[cfg(not(feature = "ai"))]
+        {
+            let _ = window;
+            let _ = cx;
+            return;
+        }
+
+        #[cfg(feature = "ai")]
+        {
+            use zed_actions::agent::ReviewBranchDiff;
+
         let diff_base = self.diff_base(cx).clone();
         let DiffBase::Merge { base_ref } = diff_base else {
             return;
@@ -191,6 +201,7 @@ impl ProjectDiff {
                 }
             })
             .detach_and_notify_err(workspace, window, cx);
+        }
     }
 
     pub fn deploy_at(
@@ -1573,7 +1584,7 @@ impl Render for ProjectDiffToolbar {
                     ),
             )
             // "Send Review to Agent" button (only shown when there are review comments)
-            .when(review_count > 0, |el| {
+            .when(review_count > 0 && ai_enabled(cx), |el| {
                 el.child(vertical_divider()).child(
                     render_send_review_to_agent_button(review_count, &focus_handle).on_click(
                         cx.listener(|this, _, window, cx| {
@@ -1662,7 +1673,7 @@ impl Render for BranchDiffToolbar {
         let (additions, deletions) = project_diff.read(cx).calculate_changed_lines(cx);
 
         let is_multibuffer_empty = project_diff.read(cx).multibuffer.read(cx).is_empty();
-        let is_ai_enabled = AgentSettings::get_global(cx).enabled(cx);
+        let is_ai_enabled = ai_enabled(cx);
 
         let show_review_button = !is_multibuffer_empty && is_ai_enabled;
 
@@ -1703,7 +1714,7 @@ impl Render for BranchDiffToolbar {
                         })),
                 )
             })
-            .when(review_count > 0, |this| {
+            .when(review_count > 0 && is_ai_enabled, |this| {
                 this.child(vertical_divider()).child(
                     render_send_review_to_agent_button(review_count, &focus_handle).on_click(
                         cx.listener(|this, _, window, cx| {
@@ -1712,6 +1723,19 @@ impl Render for BranchDiffToolbar {
                     ),
                 )
             })
+    }
+}
+
+fn ai_enabled(cx: &App) -> bool {
+    #[cfg(feature = "ai")]
+    {
+        agent_settings::AgentSettings::get_global(cx).enabled(cx)
+    }
+
+    #[cfg(not(feature = "ai"))]
+    {
+        let _ = cx;
+        false
     }
 }
 

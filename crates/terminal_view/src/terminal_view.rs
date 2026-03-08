@@ -3,9 +3,9 @@ pub mod terminal_element;
 pub mod terminal_panel;
 mod terminal_path_like_target;
 pub mod terminal_scrollbar;
+#[cfg(feature = "assistant")]
 mod terminal_slash_command;
 
-use assistant_slash_command::SlashCommandRegistry;
 use editor::{Editor, EditorSettings, actions::SelectAll, blink_manager::BlinkManager};
 use gpui::{
     Action, AnyElement, App, ClipboardEntry, DismissEvent, Entity, EventEmitter, ExternalPaths,
@@ -44,7 +44,6 @@ use terminal_element::TerminalElement;
 use terminal_panel::TerminalPanel;
 use terminal_path_like_target::{hover_path_like_target, open_path_like_target};
 use terminal_scrollbar::TerminalScrollHandle;
-use terminal_slash_command::TerminalSlashCommand;
 use ui::{
     ContextMenu, Divider, ScrollAxes, Scrollbars, Tooltip, WithScrollbar,
     prelude::*,
@@ -62,7 +61,6 @@ use workspace::{
         Direction, SearchEvent, SearchOptions, SearchToken, SearchableItem, SearchableItemHandle,
     },
 };
-use zed_actions::{agent::AddSelectionToThread, assistant::InlineAssist};
 
 struct ImeState {
     marked_text: String,
@@ -98,7 +96,6 @@ actions!(
 pub struct RenameTerminal;
 
 pub fn init(cx: &mut App) {
-    assistant_slash_command::init(cx);
     terminal_panel::init(cx);
 
     register_serializable_item::<TerminalView>(cx);
@@ -107,7 +104,12 @@ pub fn init(cx: &mut App) {
         workspace.register_action(TerminalView::deploy);
     })
     .detach();
-    SlashCommandRegistry::global(cx).register_command(TerminalSlashCommand, true);
+    #[cfg(feature = "assistant")]
+    {
+        assistant_slash_command::init(cx);
+        assistant_slash_command::SlashCommandRegistry::global(cx)
+            .register_command(terminal_slash_command::TerminalSlashCommand, true);
+    }
 }
 
 pub struct BlockProperties {
@@ -515,20 +517,31 @@ impl TerminalView {
             .as_ref()
             .is_some_and(|text| !text.is_empty());
         let context_menu = ContextMenu::build(window, cx, |menu, _, _| {
-            menu.context(self.focus_handle.clone())
+            let menu = menu
+                .context(self.focus_handle.clone())
                 .action("New Terminal", Box::new(NewTerminal::default()))
                 .separator()
                 .action("Copy", Box::new(Copy))
                 .action("Paste", Box::new(Paste))
                 .action("Select All", Box::new(SelectAll))
-                .action("Clear", Box::new(Clear))
-                .when(assistant_enabled, |menu| {
-                    menu.separator()
-                        .action("Inline Assist", Box::new(InlineAssist::default()))
-                        .when(has_selection, |menu| {
-                            menu.action("Add to Agent Thread", Box::new(AddSelectionToThread))
-                        })
-                })
+                .action("Clear", Box::new(Clear));
+            #[cfg(feature = "assistant")]
+            let menu = menu.when(assistant_enabled, |menu| {
+                use zed_actions::{agent::AddSelectionToThread, assistant::InlineAssist};
+
+                menu.separator()
+                    .action("Inline Assist", Box::new(InlineAssist::default()))
+                    .when(has_selection, |menu| {
+                        menu.action("Add to Agent Thread", Box::new(AddSelectionToThread))
+                    })
+            });
+            #[cfg(not(feature = "assistant"))]
+            let menu = {
+                let _ = (assistant_enabled, has_selection);
+                menu
+            };
+
+            menu
                 .separator()
                 .action(
                     "Close Terminal Tab",

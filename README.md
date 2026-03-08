@@ -36,6 +36,18 @@ cd superzet
 cargo run -p superzet
 ```
 
+The default app build is the lightweight local shell flavor. It excludes collab, call/WebRTC, ACP, Copilot, edit prediction, and the rest of the agent UI stack.
+
+```bash
+cargo build -p superzet
+```
+
+If you need the full upstream-like surface again, opt in explicitly:
+
+```bash
+cargo build -p superzet --features full
+```
+
 If the build complains about the Metal toolchain, install it once:
 
 ```bash

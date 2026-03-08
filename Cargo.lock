@@ -11002,6 +11002,7 @@ dependencies = [
  "component",
  "db",
  "gpui",
+ "log",
  "rpc",
  "settings",
  "sum_tree",

@@ -2299,7 +2299,7 @@ impl Render for SuperzetRightSidebar {
                     .bg(cx.theme().colors().panel_background)
                     .child(
                         h_flex()
-                            .h(px(36.))
+                            .h(px(31.))
                             .px_2()
                             .gap_1()
                             .items_center()
@@ -2318,18 +2318,6 @@ impl Render for SuperzetRightSidebar {
                                 cx,
                             ))
                             .child(div().flex_1()),
-                    )
-                    .child(
-                        v_flex()
-                            .px_2()
-                            .pb_2()
-                            .gap_0p5()
-                            .child(Label::new(title).size(LabelSize::Small))
-                            .child(
-                                Label::new(subtitle)
-                                    .size(LabelSize::XSmall)
-                                    .color(Color::Muted),
-                            ),
                     ),
             )
             .child(div().size_full().child(match self.tab {

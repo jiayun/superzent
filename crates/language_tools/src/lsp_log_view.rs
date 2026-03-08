@@ -1,5 +1,4 @@
 use collections::VecDeque;
-use edit_prediction::EditPredictionStore;
 use editor::{Editor, EditorEvent, MultiBufferOffset, actions::MoveToEnd, scroll::Autoscroll};
 use gpui::{
     App, Context, Corner, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement,
@@ -342,7 +341,16 @@ impl LspLogView {
         (editor, vec![editor_subscription, search_subscription])
     }
     pub(crate) fn try_ensure_copilot_for_project(&self, cx: &mut App) {
+        #[cfg(not(feature = "edit-prediction"))]
+        {
+            let _ = cx;
+            return;
+        }
+
+        #[cfg(feature = "edit-prediction")]
         self.log_store.update(cx, |this, cx| {
+            use edit_prediction::EditPredictionStore;
+
             let copilot = EditPredictionStore::try_global(cx)
                 .and_then(|store| store.read(cx).copilot_for_project(&self.project))?;
             let server = copilot.read(cx).language_server()?.clone();
