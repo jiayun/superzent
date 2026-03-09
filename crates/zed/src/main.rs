@@ -161,7 +161,7 @@ fn fail_to_open_window(e: anyhow::Error, _cx: &mut App) {
                 process::exit(1);
             };
 
-            let notification_id = "ai.nerdface.superzet.Oops";
+            let notification_id = "ai.nangman.superzet.Oops";
             proxy
                 .add_notification(
                     notification_id,

@@ -29,7 +29,7 @@ Deliberately out of scope for the default build:
 ## Build From Source
 
 ```bash
-git clone git@github.com:nerdface-ai/superzet.git
+git clone git@github.com:currybab/superzet.git
 cd superzet
 cargo run -p superzet
 ```
@@ -59,14 +59,14 @@ The public test release flow is macOS preview only.
 - Tag preview releases as `vX.Y.Z-pre`
 - GitHub Actions builds `superzet-aarch64.dmg`
 - The workflow uploads the DMG and `sha256sums.txt` to GitHub Releases
-- `superzet.dev/releases/...` is served by a thin Cloudflare worker that points the app at those GitHub assets
+- `releases.nangman.ai/releases/...` is served by a thin Cloudflare worker that points the app at those GitHub assets
 
 ## Release Infrastructure
 
 To publish preview builds with in-app updates, you need:
 
 - GitHub Releases enabled for this repository
-- Cloudflare configured for `superzet.dev`
+- Cloudflare configured for `nangman.ai` with a `releases.nangman.ai/releases*` route
 - the release worker deployed from `.cloudflare/release-assets`
 - optional but recommended: a Cloudflare worker secret named `GITHUB_RELEASES_TOKEN` to avoid GitHub API rate limits on update checks
 - Apple signing and notarization credentials in GitHub secrets:

@@ -6,7 +6,7 @@ description: "Guide to building superzet for macOS development."
 
 ## Repository
 
-Clone the [superzet repository](https://github.com/nerdface-ai/superzet).
+Clone the [superzet repository](https://github.com/currybab/superzet).
 
 ## Dependencies
 

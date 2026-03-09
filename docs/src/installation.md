@@ -11,7 +11,7 @@ The current public release target is macOS on Apple Silicon.
 
 Download the latest preview DMG from GitHub Releases:
 
-- [nerdface-ai/superzet releases](https://github.com/nerdface-ai/superzet/releases)
+- [superzet releases](https://github.com/currybab/superzet/releases)
 
 Install it by:
 
@@ -19,14 +19,14 @@ Install it by:
 2. opening the DMG
 3. dragging `superzet` into `/Applications`
 
-After the first bundled install, preview builds can update in-app through the `superzet.dev/releases` update feed.
+After the first bundled install, preview builds can update in-app through the `releases.nangman.ai/releases` update feed.
 
 ## Build From Source
 
 For development builds or unsupported public release targets:
 
 ```sh
-git clone git@github.com:nerdface-ai/superzet.git
+git clone git@github.com:currybab/superzet.git
 cd superzet
 cargo run -p superzet
 ```

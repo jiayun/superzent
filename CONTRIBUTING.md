@@ -6,8 +6,8 @@ Thanks for contributing.
 
 ## Before You Start
 
-- Use [GitHub Discussions](https://github.com/nerdface-ai/superzet/discussions) for feature ideas and design discussion.
-- Use [GitHub Issues](https://github.com/nerdface-ai/superzet/issues) for reproducible bugs and concrete implementation work.
+- Use [GitHub Discussions](https://github.com/currybab/superzet/discussions) for feature ideas and design discussion.
+- Use [GitHub Issues](https://github.com/currybab/superzet/issues) for reproducible bugs and concrete implementation work.
 - If you plan to work on release flow, docs publishing, or update infrastructure, read [docs/src/development/releasing.md](./docs/src/development/releasing.md) first.
 
 ## Local Development

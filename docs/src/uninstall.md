@@ -18,9 +18,9 @@ If you installed the preview DMG build:
 To remove local app data as well, delete these paths if they exist:
 
 - `~/Library/Application Support/superzet`
-- `~/Library/Caches/ai.nerdface.superzet`
+- `~/Library/Caches/ai.nangman.superzet`
 - `~/Library/Logs/superzet`
-- `~/Library/Saved Application State/ai.nerdface.superzet.savedState`
+- `~/Library/Saved Application State/ai.nangman.superzet.savedState`
 
 If you are using preview, nightly, or dev channels, remove the matching bundle identifier paths for those channels instead.
 

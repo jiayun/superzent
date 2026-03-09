@@ -206,10 +206,10 @@ impl ReleaseChannel {
     /// This also has to match the bundle identifier for Zed on macOS.
     pub fn app_id(&self) -> &'static str {
         match self {
-            ReleaseChannel::Dev => "ai.nerdface.superzet-dev",
-            ReleaseChannel::Nightly => "ai.nerdface.superzet-nightly",
-            ReleaseChannel::Preview => "ai.nerdface.superzet-preview",
-            ReleaseChannel::Stable => "ai.nerdface.superzet",
+            ReleaseChannel::Dev => "ai.nangman.superzet-dev",
+            ReleaseChannel::Nightly => "ai.nangman.superzet-nightly",
+            ReleaseChannel::Preview => "ai.nangman.superzet-preview",
+            ReleaseChannel::Stable => "ai.nangman.superzet",
         }
     }
 

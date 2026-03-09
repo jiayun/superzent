@@ -12,7 +12,7 @@ The current public release flow is:
 - channel: `preview`
 - platform: macOS Apple Silicon
 - asset host: GitHub Releases
-- update feed: `superzet.dev/releases/...` via Cloudflare worker
+- update feed: `releases.nangman.ai/releases/...` via Cloudflare worker
 
 ## Tagging
 
@@ -27,7 +27,7 @@ That triggers the release workflow, which:
 
 1. builds a preview bundle with `SUPERZET_RELEASE_CHANNEL=preview`
 2. notarizes `superzet-aarch64.dmg`
-3. uploads the DMG plus `sha256sums.txt` to the GitHub Release for that tag
+3. uploads the DMG, Linux remote-server assets, and `sha256sums.txt` to the GitHub Release for that tag
 
 ## Required GitHub Configuration
 
@@ -51,10 +51,9 @@ Optional Cloudflare worker secret:
 
 ## Required Cloudflare Setup
 
-Deploy the workers in `.cloudflare/` so these routes exist:
+Deploy the workers in `.cloudflare/` so this route exists:
 
-- `superzet.dev/docs*`
-- `superzet.dev/releases*`
+- `releases.nangman.ai/releases*`
 
 The release worker serves two behaviors:
 
@@ -70,7 +69,7 @@ The updater expects:
 ```json
 {
   "version": "0.1.0",
-  "url": "https://github.com/nerdface-ai/superzet/releases/download/..."
+  "url": "https://github.com/currybab/superzet/releases/download/..."
 }
 ```
 
@@ -81,7 +80,6 @@ For preview releases, Git tags still use `-pre`, but the update worker strips th
 These are not part of the first public release flow:
 
 - Linux or Windows binary publishing
-- remote-server asset publishing
 - collab deployment
 - hosted AI deployment
 - Sentry or other upstream release automation

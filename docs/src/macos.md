@@ -11,7 +11,7 @@ macOS is the first public release target for `superzet`.
 
 Download the latest preview DMG from:
 
-- [GitHub Releases](https://github.com/nerdface-ai/superzet/releases)
+- [GitHub Releases](https://github.com/currybab/superzet/releases)
 
 Then:
 
@@ -40,7 +40,7 @@ For a bundled macOS build:
 
 ## Updates
 
-Bundled preview builds can update through the `superzet.dev/releases` feed.
+Bundled preview builds can update through the `releases.nangman.ai/releases` feed.
 
 Development builds and source builds should be updated manually.
 

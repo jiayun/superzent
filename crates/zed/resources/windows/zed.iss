@@ -2,10 +2,10 @@
 AppId={#AppId}
 AppName={#AppName}
 AppVerName={#AppDisplayName}
-AppPublisher=nerdface-ai
-AppPublisherURL=https://github.com/nerdface-ai/superzet
-AppSupportURL=https://github.com/nerdface-ai/superzet/discussions
-AppUpdatesURL=https://github.com/nerdface-ai/superzet/releases
+AppPublisher=nangman
+AppPublisherURL=https://github.com/currybab/superzet
+AppSupportURL=https://github.com/currybab/superzet/discussions
+AppUpdatesURL=https://github.com/currybab/superzet/releases
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 DisableReadyPage=yes

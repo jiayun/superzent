@@ -7,13 +7,13 @@ description: How preview updates work in superzet.
 
 ## In-App Updates
 
-Bundled macOS preview builds check `superzet.dev/releases` for new preview DMGs.
+Bundled macOS preview builds check `releases.nangman.ai/releases` for new preview DMGs.
 
 When an update is available:
 
 - the app downloads the new bundle in the background
 - the update is applied on restart
-- release notes open from the same `superzet.dev/releases` route and redirect to the matching GitHub release page
+- release notes open from the same `releases.nangman.ai/releases` route and redirect to the matching GitHub release page
 
 ## When Auto-Update Does Not Run
 

@@ -80,5 +80,5 @@ script/histogram version-a version-b
 - [Releasing](./development/releasing.md)
 - [Release Notes](./development/release-notes.md)
 - [Debugging Crashes](./development/debugging-crashes.md)
-- [Contributing](https://github.com/nerdface-ai/superzet/blob/main/CONTRIBUTING.md)
-- [Security Policy](https://github.com/nerdface-ai/superzet/blob/main/SECURITY.md)
+- [Contributing](https://github.com/currybab/superzet/blob/main/CONTRIBUTING.md)
+- [Security Policy](https://github.com/currybab/superzet/blob/main/SECURITY.md)

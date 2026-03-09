@@ -303,7 +303,7 @@ repl = { workspace = true, features = ["test-support"] }
 
 [package.metadata.bundle-dev]
 icon = ["resources/app-icon-dev@2x.png", "resources/app-icon-dev.png"]
-identifier = "ai.nerdface.superzet-dev"
+identifier = "ai.nangman.superzet-dev"
 name = "superzet dev"
 osx_minimum_system_version = "10.15.7"
 osx_info_plist_exts = ["resources/info/*"]
@@ -311,7 +311,7 @@ osx_url_schemes = ["superzet"]
 
 [package.metadata.bundle-nightly]
 icon = ["resources/app-icon-nightly@2x.png", "resources/app-icon-nightly.png"]
-identifier = "ai.nerdface.superzet-nightly"
+identifier = "ai.nangman.superzet-nightly"
 name = "superzet nightly"
 osx_minimum_system_version = "10.15.7"
 osx_info_plist_exts = ["resources/info/*"]
@@ -319,7 +319,7 @@ osx_url_schemes = ["superzet"]
 
 [package.metadata.bundle-preview]
 icon = ["resources/app-icon-nightly@2x.png", "resources/app-icon-nightly.png"]
-identifier = "ai.nerdface.superzet-preview"
+identifier = "ai.nangman.superzet-preview"
 name = "superzet preview"
 osx_minimum_system_version = "10.15.7"
 osx_info_plist_exts = ["resources/info/*"]
@@ -327,7 +327,7 @@ osx_url_schemes = ["superzet"]
 
 [package.metadata.bundle-stable]
 icon = ["resources/app-icon@2x.png", "resources/app-icon.png"]
-identifier = "ai.nerdface.superzet"
+identifier = "ai.nangman.superzet"
 name = "superzet"
 osx_minimum_system_version = "10.15.7"
 osx_info_plist_exts = ["resources/info/*"]
