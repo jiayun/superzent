@@ -265,7 +265,7 @@ function BuildInstaller {
         }
         "preview" {
             $appId = "{{F70E4811-D0E2-4D88-AC99-D63752799F95}"
-            $appIconName = "app-icon-preview"
+            $appIconName = "app-icon-nightly"
             $appName = "Zed Preview"
             $appDisplayName = "Zed Preview"
             $appSetupName = "Zed-$Architecture"

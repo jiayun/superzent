@@ -199,7 +199,7 @@ fn set_macos_application_icon() {
     fn icon_filename() -> &'static str {
         match RELEASE_CHANNEL_NAME.as_str() {
             "stable" => "app-icon.png",
-            "preview" => "app-icon-preview.png",
+            "preview" => "app-icon-nightly.png",
             "nightly" => "app-icon-nightly.png",
             "dev" => "app-icon-dev.png",
             _ => "app-icon-dev.png",

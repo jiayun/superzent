@@ -318,7 +318,7 @@ osx_info_plist_exts = ["resources/info/*"]
 osx_url_schemes = ["superzet"]
 
 [package.metadata.bundle-preview]
-icon = ["resources/app-icon-preview@2x.png", "resources/app-icon-preview.png"]
+icon = ["resources/app-icon-nightly@2x.png", "resources/app-icon-nightly.png"]
 identifier = "ai.nerdface.superzet-preview"
 name = "superzet preview"
 osx_minimum_system_version = "10.15.7"
