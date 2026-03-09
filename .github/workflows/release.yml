@@ -11,7 +11,7 @@ on:
 jobs:
   bundle_mac_preview:
     if: github.repository_owner == 'currybab'
-    runs-on: namespace-profile-mac-large
+    runs-on: macos-latest
     env:
       SUPERZET_RELEASE_CHANNEL: preview
       SUPERZET_MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
@@ -42,7 +42,7 @@ jobs:
     timeout-minutes: 90
   bundle_linux_remote_server_preview_x86_64:
     if: github.repository_owner == 'currybab'
-    runs-on: namespace-profile-32x64-ubuntu-2004
+    runs-on: ubuntu-24.04
     env:
       CARGO_INCREMENTAL: 0
       SUPERZET_CLIENT_CHECKSUM_SEED: ${{ secrets.ZED_CLIENT_CHECKSUM_SEED }}
@@ -79,7 +79,7 @@ jobs:
     timeout-minutes: 60
   bundle_linux_remote_server_preview_aarch64:
     if: github.repository_owner == 'currybab'
-    runs-on: namespace-profile-8x32-ubuntu-2004-arm-m4
+    runs-on: ubuntu-24.04-arm
     env:
       CARGO_INCREMENTAL: 0
       SUPERZET_CLIENT_CHECKSUM_SEED: ${{ secrets.ZED_CLIENT_CHECKSUM_SEED }}
@@ -120,7 +120,7 @@ jobs:
     - bundle_linux_remote_server_preview_x86_64
     - bundle_linux_remote_server_preview_aarch64
     if: github.repository_owner == 'currybab'
-    runs-on: namespace-profile-2x4-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
     - name: release::download_workflow_artifacts
       uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
