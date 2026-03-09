@@ -60,10 +60,11 @@ jobs:
       with:
         clean: false
     - name: steps::cache_rust_dependencies_namespace
-      uses: namespacelabs/nscloud-cache-action@v1
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
       with:
-        cache: rust
         path: ~/.rustup
+        key: ${{ runner.os }}-${{ runner.arch }}-rustup-${{ hashFiles('rust-toolchain.toml') }}
+        restore-keys: ${{ runner.os }}-${{ runner.arch }}-rustup-
     - name: extension_tests::install_rust_target
       run: rustup target add wasm32-wasip2
     - name: steps::cargo_fmt
@@ -100,10 +101,11 @@ jobs:
         wget --quiet "https://zed-extension-cli.nyc3.digitaloceanspaces.com/$ZED_EXTENSION_CLI_SHA/x86_64-unknown-linux-gnu/zed-extension"
         chmod +x zed-extension
     - name: steps::cache_rust_dependencies_namespace
-      uses: namespacelabs/nscloud-cache-action@v1
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
       with:
-        cache: rust
         path: ~/.rustup
+        key: ${{ runner.os }}-${{ runner.arch }}-rustup-${{ hashFiles('rust-toolchain.toml') }}
+        restore-keys: ${{ runner.os }}-${{ runner.arch }}-rustup-
     - name: extension_tests::check
       run: |
         mkdir -p /tmp/ext-scratch

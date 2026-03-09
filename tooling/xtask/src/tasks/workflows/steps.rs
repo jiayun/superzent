@@ -236,9 +236,22 @@ pub fn clippy(platform: Platform) -> Step<Run> {
 }
 
 pub fn cache_rust_dependencies_namespace() -> Step<Use> {
-    named::uses("namespacelabs", "nscloud-cache-action", "v1")
-        .add_with(("cache", "rust"))
-        .add_with(("path", "~/.rustup"))
+    // The Namespace cache action requires runner-provisioned cache volumes, so
+    // GitHub-hosted runners need a generic cache backend here instead.
+    named::uses(
+        "actions",
+        "cache",
+        "0057852bfaa89a56745cba8c7296529d2fc39830", // v4
+    )
+    .add_with(("path", "~/.rustup"))
+    .add_with((
+        "key",
+        "${{ runner.os }}-${{ runner.arch }}-rustup-${{ hashFiles('rust-toolchain.toml') }}",
+    ))
+    .add_with((
+        "restore-keys",
+        "${{ runner.os }}-${{ runner.arch }}-rustup-",
+    ))
 }
 
 pub fn setup_sccache(platform: Platform) -> Step<Run> {
