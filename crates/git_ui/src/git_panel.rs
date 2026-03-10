@@ -38,14 +38,14 @@ use git::{
     ExpandCommitEditor, GitHostingProviderRegistry, RestoreTrackedFiles, StageAll, StashAll,
     StashApply, StashPop, TrashUntrackedFiles, UnstageAll,
 };
+#[cfg(feature = "ai")]
+use gpui::AsyncApp;
 use gpui::{
     Action, AsyncWindowContext, Bounds, ClickEvent, Corner, DismissEvent, Empty, Entity,
     EventEmitter, FocusHandle, Focusable, KeyContext, MouseButton, MouseDownEvent, Point,
     PromptLevel, ScrollStrategy, Subscription, Task, TextStyle, UniformListScrollHandle,
     WeakEntity, actions, anchored, deferred, point, size, uniform_list,
 };
-#[cfg(feature = "ai")]
-use gpui::AsyncApp;
 use itertools::Itertools;
 use language::{Buffer, File};
 #[cfg(feature = "ai")]
@@ -86,13 +86,13 @@ use util::{ResultExt, TryFutureExt, maybe};
 #[cfg(any(feature = "ai", test))]
 use util::rel_path::RelPath;
 use workspace::SERIALIZATION_THROTTLE_TIME;
+#[cfg(feature = "ai")]
+use workspace::notifications::{ErrorMessagePrompt, NotificationId};
 use workspace::{
     Workspace,
     dock::{DockPosition, Panel, PanelEvent},
     notifications::{DetachAndPromptErr, NotifyResultExt},
 };
-#[cfg(feature = "ai")]
-use workspace::notifications::{ErrorMessagePrompt, NotificationId};
 
 actions!(
     git_panel,

@@ -118,6 +118,28 @@ impl CreateRemoteDevContainer {
     }
 }
 
+#[allow(unreachable_patterns)]
+fn project_picker_data_for_connection(connection: &RemoteConnectionOptions) -> ProjectPickerData {
+    match connection {
+        RemoteConnectionOptions::Ssh(connection) => ProjectPickerData::Ssh {
+            connection_string: connection.connection_string().into(),
+            nickname: connection.nickname.clone().map(|nick| nick.into()),
+        },
+        RemoteConnectionOptions::Wsl(connection) => ProjectPickerData::Wsl {
+            distro_name: connection.distro_name.clone().into(),
+        },
+        RemoteConnectionOptions::Docker(_) => ProjectPickerData::Ssh {
+            // Not implemented as a project picker at this time
+            connection_string: "".into(),
+            nickname: None,
+        },
+        _ => ProjectPickerData::Ssh {
+            connection_string: connection.display_name().into(),
+            nickname: None,
+        },
+    }
+}
+
 #[cfg(target_os = "windows")]
 struct AddWslDistro {
     picker: Entity<Picker<crate::wsl_picker::WslPickerDelegate>>,
@@ -416,25 +438,7 @@ impl ProjectPicker {
             picker
         });
 
-        let data = match &connection {
-            RemoteConnectionOptions::Ssh(connection) => ProjectPickerData::Ssh {
-                connection_string: connection.connection_string().into(),
-                nickname: connection.nickname.clone().map(|nick| nick.into()),
-            },
-            RemoteConnectionOptions::Wsl(connection) => ProjectPickerData::Wsl {
-                distro_name: connection.distro_name.clone().into(),
-            },
-            RemoteConnectionOptions::Docker(_) => ProjectPickerData::Ssh {
-                // Not implemented as a project picker at this time
-                connection_string: "".into(),
-                nickname: None,
-            },
-            #[cfg(any(test, feature = "test-support"))]
-            RemoteConnectionOptions::Mock(options) => ProjectPickerData::Ssh {
-                connection_string: format!("mock-{}", options.id).into(),
-                nickname: None,
-            },
-        };
+        let data = project_picker_data_for_connection(&connection);
         let _path_task = cx
             .spawn_in(window, {
                 let workspace = workspace;

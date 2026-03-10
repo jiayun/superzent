@@ -1382,6 +1382,7 @@ impl PickerDelegate for RecentProjectsDelegate {
     }
 }
 
+#[allow(unreachable_patterns)]
 fn icon_for_remote_connection(options: Option<&RemoteConnectionOptions>) -> IconName {
     match options {
         None => IconName::Screen,
@@ -1389,8 +1390,7 @@ fn icon_for_remote_connection(options: Option<&RemoteConnectionOptions>) -> Icon
             RemoteConnectionOptions::Ssh(_) => IconName::Server,
             RemoteConnectionOptions::Wsl(_) => IconName::Linux,
             RemoteConnectionOptions::Docker(_) => IconName::Box,
-            #[cfg(any(test, feature = "test-support"))]
-            RemoteConnectionOptions::Mock(_) => IconName::Server,
+            _ => IconName::Server,
         },
     }
 }

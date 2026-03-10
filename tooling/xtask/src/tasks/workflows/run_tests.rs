@@ -18,6 +18,60 @@ use super::{
     steps::{self, FluentBuilder, NamedJob, named, release_job},
 };
 
+const MAC_DEFAULT_NEXTEST_EXCLUDE_FILTER: &str = concat!(
+    "package(acp_thread) | ",
+    "package(agent) | ",
+    "package(agent_ui) | ",
+    "package(collab) | ",
+    "package(copilot) | ",
+    "(package(editor) and test(edit_prediction_tests)) | ",
+    "(package(project) and test(disable_ai_settings_tests)) | ",
+    "(package(workspace) and test(test_sidebar_disabled_when_disable_ai_is_enabled)) | ",
+    "(package(superzet) and test(test_disable_ai_crash))"
+);
+
+fn cargo_nextest_for_platform(platform: Platform, filter_packages: bool) -> Step<Run> {
+    if platform != Platform::Mac {
+        return if filter_packages {
+            steps::cargo_nextest(platform)
+                .with_changed_packages_filter("orchestrate")
+                .into()
+        } else {
+            steps::cargo_nextest(platform).into()
+        };
+    }
+
+    let command = if filter_packages {
+        formatdoc!(
+            r#"
+            FILTER='not ({exclude_filter})'
+            if [ -n "$CHANGED_PACKAGES" ]; then
+              FILTER="($CHANGED_PACKAGES) and ($FILTER)"
+            fi
+            cargo nextest run --workspace --no-fail-fast --no-tests=warn -E "$FILTER"
+            "#,
+            exclude_filter = MAC_DEFAULT_NEXTEST_EXCLUDE_FILTER,
+        )
+    } else {
+        formatdoc!(
+            r#"
+            cargo nextest run --workspace --no-fail-fast --no-tests=warn -E 'not ({exclude_filter})'
+            "#,
+            exclude_filter = MAC_DEFAULT_NEXTEST_EXCLUDE_FILTER,
+        )
+    };
+
+    let step = named::bash(command);
+    if filter_packages {
+        step.add_env((
+            "CHANGED_PACKAGES",
+            "${{ needs.orchestrate.outputs.changed_packages }}",
+        ))
+    } else {
+        step
+    }
+}
+
 pub(crate) fn run_tests() -> Workflow {
     // Specify anything which should potentially skip full test suite in this regex:
     // - docs/
@@ -504,12 +558,10 @@ fn run_platform_tests_impl(platform: Platform, filter_packages: bool) -> NamedJo
             .add_step(steps::clear_target_dir_if_large(platform))
             .add_step(steps::setup_sccache(platform))
             .when(filter_packages, |job| {
-                job.add_step(
-                    steps::cargo_nextest(platform).with_changed_packages_filter("orchestrate"),
-                )
+                job.add_step(cargo_nextest_for_platform(platform, true))
             })
             .when(!filter_packages, |job| {
-                job.add_step(steps::cargo_nextest(platform))
+                job.add_step(cargo_nextest_for_platform(platform, false))
             })
             .add_step(steps::show_sccache_stats(platform))
             .add_step(steps::cleanup_cargo_config(platform)),
@@ -590,9 +642,9 @@ fn doctests() -> NamedJob {
 fn disabled(job: NamedJob) -> NamedJob {
     NamedJob {
         name: job.name,
-        job: job
-            .job
-            .cond(Expression::new("github.repository == '__disabled__/__disabled__'")),
+        job: job.job.cond(Expression::new(
+            "github.repository == '__disabled__/__disabled__'",
+        )),
     }
 }
 

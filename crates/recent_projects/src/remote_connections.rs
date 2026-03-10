@@ -29,6 +29,16 @@ pub use remote_connection::{
     connect,
 };
 
+#[allow(unreachable_patterns)]
+fn remote_connection_error_message(connection_options: &RemoteConnectionOptions) -> &'static str {
+    match connection_options {
+        RemoteConnectionOptions::Ssh(_) => "Failed to connect over SSH",
+        RemoteConnectionOptions::Wsl(_) => "Failed to connect to WSL",
+        RemoteConnectionOptions::Docker(_) => "Failed to connect to Dev Container",
+        _ => "Failed to connect to remote server",
+    }
+}
+
 #[derive(RegisterSetting)]
 pub struct RemoteSettings {
     pub ssh_connections: ExtendingVec<SshConnection>,
@@ -314,17 +324,7 @@ pub async fn open_remote_project(
                     .update(cx, |_, window, cx| {
                         window.prompt(
                             PromptLevel::Critical,
-                            match connection_options {
-                                RemoteConnectionOptions::Ssh(_) => "Failed to connect over SSH",
-                                RemoteConnectionOptions::Wsl(_) => "Failed to connect to WSL",
-                                RemoteConnectionOptions::Docker(_) => {
-                                    "Failed to connect to Dev Container"
-                                }
-                                #[cfg(any(test, feature = "test-support"))]
-                                RemoteConnectionOptions::Mock(_) => {
-                                    "Failed to connect to mock server"
-                                }
-                            },
+                            remote_connection_error_message(&connection_options),
                             Some(&format!("{e:#}")),
                             &["Retry", "Cancel"],
                             cx,
@@ -375,17 +375,7 @@ pub async fn open_remote_project(
                     .update(cx, |_, window, cx| {
                         window.prompt(
                             PromptLevel::Critical,
-                            match connection_options {
-                                RemoteConnectionOptions::Ssh(_) => "Failed to connect over SSH",
-                                RemoteConnectionOptions::Wsl(_) => "Failed to connect to WSL",
-                                RemoteConnectionOptions::Docker(_) => {
-                                    "Failed to connect to Dev Container"
-                                }
-                                #[cfg(any(test, feature = "test-support"))]
-                                RemoteConnectionOptions::Mock(_) => {
-                                    "Failed to connect to mock server"
-                                }
-                            },
+                            remote_connection_error_message(&connection_options),
                             Some(&format!("{e:#}")),
                             &["Retry", "Cancel"],
                             cx,

@@ -2317,8 +2317,8 @@ mod tests {
         DisplayPoint, Editor, MultiBufferOffset, SelectionEffects, display_map::DisplayRow,
     };
     use gpui::{
-        Action, AnyWindowHandle, App, AssetSource, BorrowAppContext, TestAppContext,
-        UpdateGlobal, VisualTestContext, WindowHandle, actions,
+        Action, AnyWindowHandle, App, AssetSource, BorrowAppContext, TestAppContext, UpdateGlobal,
+        VisualTestContext, WindowHandle, actions,
     };
     use language::LanguageRegistry;
     use languages::{markdown_lang, rust_lang};
