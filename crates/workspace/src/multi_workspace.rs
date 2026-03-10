@@ -822,8 +822,11 @@ impl Render for MultiWorkspace {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use feature_flags::FeatureFlagAppExt as _;
     use fs::FakeFs;
     use gpui::TestAppContext;
+    use project::DisableAiSettings;
+    use settings::Settings as _;
     use settings::SettingsStore;
 
     fn init_test(cx: &mut TestAppContext) {

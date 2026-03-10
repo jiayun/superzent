@@ -25,6 +25,7 @@ project_panel.workspace = true
 recent_projects.workspace = true
 remote.workspace = true
 settings.workspace = true
+smol.workspace = true
 superzet_git.workspace = true
 superzet_agent.workspace = true
 superzet_model.workspace = true

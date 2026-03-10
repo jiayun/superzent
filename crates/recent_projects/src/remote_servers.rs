@@ -502,7 +502,7 @@ impl ProjectPicker {
                     })
                     .log_err();
 
-                    let window = if let Some(window) = existing_window.clone() {
+                    let window = if let Some(window) = existing_window {
                         window
                     } else {
                         let options = cx

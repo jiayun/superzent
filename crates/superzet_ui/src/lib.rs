@@ -494,7 +494,7 @@ fn render_hidden_preset_dropdown(
     cx: &mut Context<Pane>,
 ) -> AnyElement {
     let workspace_id = workspace_entry.id.clone();
-    let workspace_entry_for_menu = workspace_entry.clone();
+    let workspace_entry_for_menu = workspace_entry;
     let menu = ContextMenu::build(window, cx, move |mut menu, _, _| {
         for preset in &hidden_presets {
             let workspace_handle = workspace_handle.clone();
@@ -1654,7 +1654,7 @@ impl SuperzetSidebar {
         let context_menu = ContextMenu::build(window, cx, move |menu, _, _| {
             menu.entry("Rename Workspace", None, {
                 let entity = entity.clone();
-                let workspace_id = workspace.id.clone();
+                let workspace_id = workspace.id;
                 move |window, cx| {
                     entity.update(cx, |this, cx| {
                         this.begin_workspace_rename(&workspace_id, window, cx);
@@ -1693,7 +1693,7 @@ impl SuperzetSidebar {
         let context_menu = ContextMenu::build(window, cx, move |menu, _, _| {
             menu.entry("Close Project", None, {
                 let entity = entity.clone();
-                let project_id = project.id.clone();
+                let project_id = project.id;
                 move |window, cx| {
                     entity.update(cx, |this, cx| {
                         this.close_project(&project_id, window, cx);
@@ -2845,7 +2845,7 @@ fn run_add_project(
 ) {
     let workspace_handle = cx.entity().downgrade();
     workspace.toggle_modal(window, cx, move |_window, cx| {
-        AddProjectChooserModal::new(workspace_handle.clone(), cx)
+        AddProjectChooserModal::new(workspace_handle, cx)
     });
 }
 
@@ -2873,7 +2873,7 @@ fn run_new_workspace(
 
     let workspace_handle = cx.entity().downgrade();
     workspace.toggle_modal(window, cx, move |window, cx| {
-        NewWorkspaceModal::new(workspace_handle.clone(), project.clone(), window, cx)
+        NewWorkspaceModal::new(workspace_handle.clone(), project, window, cx)
     });
 }
 
@@ -2909,12 +2909,8 @@ fn run_reveal_changes(
         );
         return;
     };
-    let switch_task = open_workspace_entry(
-        workspace_entry.clone(),
-        workspace.app_state().clone(),
-        window,
-        cx,
-    );
+    let switch_task =
+        open_workspace_entry(workspace_entry, workspace.app_state().clone(), window, cx);
     let maybe_multi_workspace = window.window_handle().downcast::<MultiWorkspace>();
 
     cx.spawn_in(window, async move |_, cx| {
@@ -3211,7 +3207,7 @@ fn run_close_project(
                     store.remove_project(&project_id, cx);
                 });
                 show_project_close_toast(
-                    invoking_window.clone(),
+                    invoking_window,
                     current_workspace.clone(),
                     format!("Closed {project_name}"),
                     cx,
@@ -3219,7 +3215,7 @@ fn run_close_project(
             }
             Err(error) => {
                 show_project_close_toast(
-                    invoking_window.clone(),
+                    invoking_window,
                     current_workspace.clone(),
                     format!("Failed to close project: {error}"),
                     cx,
@@ -3267,7 +3263,7 @@ async fn close_project_in_all_windows(
 
         if matching_indexes.len() == workspace_count {
             ensure_project_close_fallback(
-                workspace_window.clone(),
+                workspace_window,
                 fallback_workspace.clone(),
                 app_state.clone(),
                 cx,
@@ -3986,11 +3982,8 @@ fn dispatch_native_terminal_notification(title: &str, body: &str) {
     let body = body.replace('\\', "\\\\").replace('"', "\\\"");
     let script = format!("display notification \"{body}\" with title \"{title}\"");
 
-    if let Err(error) = std::process::Command::new("/usr/bin/osascript")
-        .arg("-e")
-        .arg(script)
-        .spawn()
-    {
+    let mut command = smol::process::Command::new("/usr/bin/osascript");
+    if let Err(error) = command.arg("-e").arg(script).spawn() {
         log::error!("failed to dispatch macOS notification: {error}");
     }
 }

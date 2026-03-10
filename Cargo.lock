@@ -16853,6 +16853,7 @@ dependencies = [
  "recent_projects",
  "remote",
  "settings",
+ "smol",
  "superzet_agent",
  "superzet_git",
  "superzet_model",

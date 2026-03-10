@@ -67,13 +67,15 @@ use agent_ui::AgentPanel;
 #[cfg(feature = "collab")]
 use collab_ui::channel_view::ChannelView;
 #[cfg(feature = "ai")]
+use gpui::Focusable;
+#[cfg(feature = "ai")]
 use zed::edit_prediction_registry;
 
 #[cfg(target_os = "macos")]
 use cocoa::{
     appkit::NSApplication,
     base::{id, nil},
-    foundation::NSString,
+    foundation::{NSAutoreleasePool, NSString},
 };
 #[cfg(target_os = "macos")]
 use objc::{class, msg_send, sel, sel_impl};
@@ -188,8 +190,9 @@ fn fail_to_open_window(e: anyhow::Error, _cx: &mut App) {
 static STARTUP_TIME: OnceLock<Instant> = OnceLock::new();
 
 #[cfg(target_os = "macos")]
+#[allow(clippy::disallowed_methods)]
 unsafe fn ns_string(string: &str) -> id {
-    unsafe { NSString::alloc(nil).init_str(string) }
+    unsafe { NSString::alloc(nil).init_str(string).autorelease() }
 }
 
 #[cfg(target_os = "macos")]
@@ -1360,11 +1363,12 @@ fn handle_open_request(request: OpenRequest, app_state: Arc<AppState>, cx: &mut 
                                     window,
                                     cx,
                                 )
-                                .log_err()
                             },
-                        )?)
+                        )?);
                     }
-                    future::join_all(promises).await;
+                    for result in future::join_all(promises).await {
+                        result.log_err();
+                    }
                     anyhow::Ok(())
                 }
             })

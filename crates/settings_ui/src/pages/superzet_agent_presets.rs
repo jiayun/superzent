@@ -299,11 +299,11 @@ impl AgentPresetsPage {
                         Button::new(format!("superzet-preset-reset-{}", preset.id), "Reset")
                             .style(ButtonStyle::Subtle)
                             .on_click(cx.listener({
-                                let label_editor = label_editor.clone();
-                                let command_editor = command_editor.clone();
-                                let args_editor = args_editor.clone();
-                                let env_editor = env_editor.clone();
-                                let attention_editor = attention_editor.clone();
+                                let reset_label_editor = label_editor.clone();
+                                let reset_command_editor = command_editor.clone();
+                                let reset_args_editor = args_editor.clone();
+                                let reset_env_editor = env_editor.clone();
+                                let reset_attention_editor = attention_editor.clone();
                                 let label = preset.label.clone();
                                 let command = preset.command.clone();
                                 let args = preset.args.join("\n");
@@ -311,21 +311,31 @@ impl AgentPresetsPage {
                                 let attention = preset.attention_patterns.join("\n");
                                 move |this, _, window, cx| {
                                     Self::reset_editor_text(
-                                        &label_editor,
+                                        &reset_label_editor,
                                         label.clone(),
                                         window,
                                         cx,
                                     );
                                     Self::reset_editor_text(
-                                        &command_editor,
+                                        &reset_command_editor,
                                         command.clone(),
                                         window,
                                         cx,
                                     );
-                                    Self::reset_editor_text(&args_editor, args.clone(), window, cx);
-                                    Self::reset_editor_text(&env_editor, env.clone(), window, cx);
                                     Self::reset_editor_text(
-                                        &attention_editor,
+                                        &reset_args_editor,
+                                        args.clone(),
+                                        window,
+                                        cx,
+                                    );
+                                    Self::reset_editor_text(
+                                        &reset_env_editor,
+                                        env.clone(),
+                                        window,
+                                        cx,
+                                    );
+                                    Self::reset_editor_text(
+                                        &reset_attention_editor,
                                         attention.clone(),
                                         window,
                                         cx,
@@ -339,11 +349,6 @@ impl AgentPresetsPage {
                             .style(ButtonStyle::Filled)
                             .on_click(cx.listener({
                                 let preset_id = preset.id.clone();
-                                let label_editor = label_editor.clone();
-                                let command_editor = command_editor.clone();
-                                let args_editor = args_editor.clone();
-                                let env_editor = env_editor.clone();
-                                let attention_editor = attention_editor.clone();
                                 move |this, _, _, cx| {
                                     this.save_preset(
                                         &preset_id,

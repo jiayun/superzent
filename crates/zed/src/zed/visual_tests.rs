@@ -52,6 +52,7 @@ pub fn init_visual_test(cx: &mut VisualTestAppContext) -> Arc<AppState> {
 
         gpui_tokio::init(cx);
         theme::init(theme::LoadThemes::JustBase, cx);
+        #[cfg(feature = "calls")]
         audio::init(cx);
         workspace::init(app_state.clone(), cx);
         release_channel::init(semver::Version::new(0, 0, 0), cx);

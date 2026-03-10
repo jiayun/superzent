@@ -357,7 +357,7 @@ impl Render for ResourceMonitor {
         let tooltip = self.trigger_tooltip();
         let resource_monitor = cx.entity().downgrade();
         let resource_monitor_for_open = resource_monitor.clone();
-        let resource_monitor_for_menu = resource_monitor.clone();
+        let resource_monitor_for_menu = resource_monitor;
 
         PopoverMenu::new("resource-monitor-popover")
             .anchor(Corner::BottomLeft)

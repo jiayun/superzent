@@ -69,6 +69,7 @@ fn parse_shell(output: &str, fallback_shell: &str) -> String {
     }
 }
 
+#[cfg(any(debug_assertions, feature = "build-remote-server-binary"))]
 fn remote_server_env(primary: &str, legacy: &str) -> Option<String> {
     std::env::var(primary)
         .ok()
