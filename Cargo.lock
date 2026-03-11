@@ -17943,7 +17943,6 @@ dependencies = [
  "smallvec",
  "story",
  "superzet_model",
- "superzet_ui",
  "sysinfo 0.37.2",
  "telemetry",
  "terminal_view",

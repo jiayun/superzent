@@ -72,7 +72,7 @@ jobs:
         BASE: ${{ inputs.base }}
         HEAD: ${{ inputs.head }}
     - name: '@actions/upload-artifact results.md'
-      uses: actions/upload-artifact@bbbca2ff186980d4b5400ce112fb0775aa163254
+      uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
       with:
         name: results.md
         path: results.md

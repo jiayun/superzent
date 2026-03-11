@@ -61,7 +61,6 @@ ui.workspace = true
 util.workspace = true
 workspace.workspace = true
 zed_actions.workspace = true
-superzet_ui.workspace = true
 superzet_model.workspace = true
 
 [target.'cfg(windows)'.dependencies]
