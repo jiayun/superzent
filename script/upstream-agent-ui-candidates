@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+FORMAT="text"
+FETCH_UPSTREAM=1
+SINCE_SHA=""
+
+WATCH_PATHS=(
+    "crates/agent_ui"
+    "crates/agent"
+    "crates/acp_thread"
+    "crates/agent_servers"
+    "crates/agent_settings"
+    "crates/zed/src/main.rs"
+    "crates/zed/src/zed.rs"
+)
+
+usage() {
+    cat <<'EOF'
+Usage: script/upstream-agent-ui-candidates --since <sha> [--no-fetch] [--format text|markdown]
+
+Lists upstream Zed commits on upstream/main that touch the ACP and agent UI watchlist.
+
+Options:
+  --since <sha>         Required baseline commit. Must be an ancestor of upstream/main.
+  --no-fetch            Do not fetch upstream/main before generating the report.
+  --format <format>     Output format: text (default) or markdown.
+  -h, --help            Show this help text.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --since)
+            SINCE_SHA="${2:-}"
+            shift 2
+            ;;
+        --no-fetch)
+            FETCH_UPSTREAM=0
+            shift
+            ;;
+        --format)
+            FORMAT="${2:-}"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            usage >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [[ -z "$SINCE_SHA" ]]; then
+    echo "--since is required" >&2
+    usage >&2
+    exit 1
+fi
+
+if [[ "$FORMAT" != "text" && "$FORMAT" != "markdown" ]]; then
+    echo "Unsupported format: $FORMAT" >&2
+    exit 1
+fi
+
+git rev-parse --git-dir >/dev/null 2>&1
+
+if (( FETCH_UPSTREAM )); then
+    git fetch --quiet upstream main
+fi
+
+git rev-parse --verify "${SINCE_SHA}^{commit}" >/dev/null 2>&1 || {
+    echo "Unknown commit: $SINCE_SHA" >&2
+    exit 1
+}
+
+git rev-parse --verify "upstream/main^{commit}" >/dev/null 2>&1 || {
+    echo "Missing upstream/main. Add the upstream remote or fetch it first." >&2
+    exit 1
+}
+
+if ! git merge-base --is-ancestor "$SINCE_SHA" upstream/main; then
+    echo "Baseline commit is not an ancestor of upstream/main: $SINCE_SHA" >&2
+    exit 1
+fi
+
+COMMITS=()
+while IFS= read -r entry; do
+    COMMITS+=("$entry")
+done < <(
+    git log --reverse --format='%H%x09%s' "${SINCE_SHA}..upstream/main" -- "${WATCH_PATHS[@]}"
+)
+
+UPSTREAM_TIP="$(git rev-parse --short=12 upstream/main)"
+
+extract_pr_number() {
+    local subject="$1"
+    if [[ "$subject" =~ \(#([0-9]+)\) ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+    fi
+}
+
+print_watchlist_text() {
+    local path
+    for path in "${WATCH_PATHS[@]}"; do
+        printf '  - %s\n' "$path"
+    done
+}
+
+print_watchlist_markdown() {
+    local path
+    for path in "${WATCH_PATHS[@]}"; do
+        printf -- '- `%s`\n' "$path"
+    done
+}
+
+if [[ "$FORMAT" == "text" ]]; then
+    printf 'Upstream ACP/agent_ui candidates\n'
+    printf 'Baseline: %s\n' "$SINCE_SHA"
+    printf 'Upstream tip: %s\n' "$UPSTREAM_TIP"
+    printf 'Watchlist:\n'
+    print_watchlist_text
+    printf '\n'
+
+    if [[ "${#COMMITS[@]}" -eq 0 ]]; then
+        printf 'No matching commits found.\n'
+        exit 0
+    fi
+
+    for entry in "${COMMITS[@]}"; do
+        sha="${entry%%$'\t'*}"
+        subject="${entry#*$'\t'}"
+        short_sha="$(git rev-parse --short=12 "$sha")"
+        pr_number="$(extract_pr_number "$subject" || true)"
+
+        printf '%s  %s\n' "$short_sha" "$subject"
+        if [[ -n "$pr_number" ]]; then
+            printf '  PR: https://github.com/zed-industries/zed/pull/%s\n' "$pr_number"
+        fi
+        printf '  Commit: https://github.com/zed-industries/zed/commit/%s\n' "$sha"
+        printf '\n'
+    done
+else
+    printf '## Upstream ACP/agent_ui candidates\n\n'
+    printf -- '- Baseline: `%s`\n' "$SINCE_SHA"
+    printf -- '- Upstream tip: `%s`\n' "$UPSTREAM_TIP"
+    printf 'Watchlist:\n\n'
+    print_watchlist_markdown
+    printf '\n'
+
+    if [[ "${#COMMITS[@]}" -eq 0 ]]; then
+        printf 'No matching commits found.\n'
+        exit 0
+    fi
+
+    for entry in "${COMMITS[@]}"; do
+        sha="${entry%%$'\t'*}"
+        subject="${entry#*$'\t'}"
+        short_sha="$(git rev-parse --short=12 "$sha")"
+        pr_number="$(extract_pr_number "$subject" || true)"
+
+        if [[ -n "$pr_number" ]]; then
+            printf -- '- [`%s`](https://github.com/zed-industries/zed/commit/%s) %s ([#%s](https://github.com/zed-industries/zed/pull/%s))\n' \
+                "$short_sha" "$sha" "$subject" "$pr_number" "$pr_number"
+        else
+            printf -- '- [`%s`](https://github.com/zed-industries/zed/commit/%s) %s\n' \
+                "$short_sha" "$sha" "$subject"
+        fi
+    done
+fi

@@ -26,6 +26,22 @@ Deliberately out of scope for the default build:
 - hosted AI surfaces from upstream Zed
 - remote-server distribution as part of the public release flow
 
+## Roadmap
+
+Now:
+
+- stabilize the local-first workspace shell and public macOS release
+- keep docs, branding, and release infrastructure aligned with `superzet`
+
+Next:
+
+- center-pane ACP agent tabs built on the existing upstream agent UI stack
+- a repeatable intake lane for ACP and agent UI improvements from upstream Zed
+
+Later:
+
+- lighter maintainer workflows for CI, docs, and release operations
+
 ## Build From Source
 
 ```bash

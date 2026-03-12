@@ -9,6 +9,7 @@ Thanks for contributing.
 - Use [GitHub Discussions](https://github.com/currybab/superzet/discussions) for feature ideas and design discussion.
 - Use [GitHub Issues](https://github.com/currybab/superzet/issues) for reproducible bugs and concrete implementation work.
 - If you plan to work on release flow, docs publishing, or update infrastructure, read [docs/src/development/releasing.md](./docs/src/development/releasing.md) first.
+- If you plan to pull ACP or native agent UI changes from upstream Zed, read [docs/src/development/upstream-sync.md](./docs/src/development/upstream-sync.md) first.
 
 ## Local Development
 

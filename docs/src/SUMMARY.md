@@ -55,5 +55,6 @@
   - [Linux](./development/linux.md)
   - [Windows](./development/windows.md)
   - [Releasing](./development/releasing.md)
+  - [Upstream Sync](./development/upstream-sync.md)
   - [Release Notes](./development/release-notes.md)
   - [Debugging Crashes](./development/debugging-crashes.md)

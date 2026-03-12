@@ -78,6 +78,7 @@ script/histogram version-a version-b
 ## Release and Docs Workflow
 
 - [Releasing](./development/releasing.md)
+- [Upstream Sync](./development/upstream-sync.md)
 - [Release Notes](./development/release-notes.md)
 - [Debugging Crashes](./development/debugging-crashes.md)
 - [Contributing](https://github.com/currybab/superzet/blob/main/CONTRIBUTING.md)
