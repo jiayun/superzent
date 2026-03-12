@@ -124,7 +124,7 @@ Images are hosted externally. Reference format:
 
 - Relative links for same-directory: `[Agent Panel](./agent-panel.md)`
 - With anchors: `[Custom Models](./llm-providers.md#anthropic-custom-models)`
-- Parent directory: `[Telemetry](../telemetry.md)`
+- Parent directory: `[Getting Started](../getting-started.md)`
 
 ## Scope
 

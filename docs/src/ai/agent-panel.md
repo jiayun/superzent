@@ -236,17 +236,3 @@ Autonomous code editing (where the agent writes to files) is only available in t
 If you hit an error or unusual LLM behavior, open the thread as Markdown with `agent: open thread as markdown` and attach it to your GitHub issue.
 
 You can also open threads as Markdown by clicking on the file icon button, to the right of the thumbs down button, when focused on the panel's editor.
-
-## Feedback {#feedback}
-
-You can rate agent responses to help improve Zed's system prompt and tools.
-
-> Note that rating responses will send your data related to that response to Zed's servers.
-> See [AI Improvement](./ai-improvement.md) and [Privacy and Security](./privacy-and-security.md) for more information about Zed's approach to AI improvement, privacy, and security.
-> **_If you don't want data persisted on Zed's servers, don't rate_**.
-> We will not collect data for improving our Agentic offering without you explicitly rating responses.
-
-To help improve Zed's system prompt and tools, rate responses with the thumbs up/down controls at the end of each response.
-In case of a thumbs down, a new text area will show up where you can add more specifics about what happened.
-
-You can provide feedback on the thread at any point after the agent responds, and multiple times within the same thread.

@@ -341,4 +341,3 @@
 /.cloudflare/ @zed-industries/cloud-team
 /crates/cloud_api_client/ @zed-industries/cloud-team
 /crates/cloud_api_types/ @zed-industries/cloud-team
-/legal/ @zed-industries/bizops-team
