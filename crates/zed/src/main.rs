@@ -1571,18 +1571,24 @@ pub(crate) async fn restore_or_create_workspace(
             cx.update(|cx| show_onboarding_view(app_state, cx)).await?;
         } else {
             cx.update(|cx| {
+                let should_open_empty_workspace = superzet_model::SuperzetStore::try_global(cx)
+                    .is_some_and(|store| store.read(cx).startup_workspace().is_none());
                 workspace::open_new(
                     Default::default(),
                     app_state,
                     cx,
-                    |workspace, window, cx| {
+                    move |workspace, window, cx| {
+                        if should_open_empty_workspace {
+                            return;
+                        }
+
                         let restore_on_startup =
                             WorkspaceSettings::get_global(cx).restore_on_startup;
-                        match restore_on_startup {
-                            workspace::RestoreOnStartupBehavior::Launchpad => {}
-                            _ => {
-                                Editor::new_file(workspace, &Default::default(), window, cx);
-                            }
+                        if !matches!(
+                            restore_on_startup,
+                            workspace::RestoreOnStartupBehavior::Launchpad
+                        ) {
+                            Editor::new_file(workspace, &Default::default(), window, cx);
                         }
                     },
                 )

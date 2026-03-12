@@ -2484,12 +2484,10 @@ impl SuperzetEmptyPaneView {
         }
     }
 
-    fn current_workspace_entity(
-        &self,
-        window: &gpui::Window,
-        cx: &App,
-    ) -> Option<Entity<Workspace>> {
-        workspace_from_window(window, cx)
+    fn current_workspace_entity(&self, cx: &App) -> Option<Entity<Workspace>> {
+        self.pane
+            .upgrade()
+            .and_then(|pane| pane.read(cx).workspace())
     }
 
     fn action_button(
@@ -2533,7 +2531,7 @@ impl Render for SuperzetEmptyPaneView {
                 IconName::OpenFolder,
                 true,
                 |this, window, cx| {
-                    if let Some(current_workspace) = this.current_workspace_entity(window, cx) {
+                    if let Some(current_workspace) = this.current_workspace_entity(cx) {
                         run_add_project_from_store(current_workspace, window, cx);
                     }
                 },

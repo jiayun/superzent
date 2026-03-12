@@ -5,7 +5,6 @@ use cli::{CliRequest, CliResponse, ipc::IpcSender};
 use cli::{IpcHandshake, ipc};
 use client::{ZedLink, parse_zed_link};
 use db::kvp::KEY_VALUE_STORE;
-use editor::Editor;
 use fs::Fs;
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::channel::{mpsc, oneshot};
@@ -488,17 +487,16 @@ async fn open_workspaces(
         if matches!(KEY_VALUE_STORE.read_kvp(FIRST_OPEN), Ok(None)) {
             cx.update(|cx| show_onboarding_view(app_state, cx).detach());
         }
-        // If not the first launch, show an empty window with empty editor
+        // If not the first launch, open an empty workspace so the center pane
+        // can render its own empty state instead of forcing an untitled buffer.
         else {
             cx.update(|cx| {
                 let open_options = OpenOptions {
                     env,
                     ..Default::default()
                 };
-                workspace::open_new(open_options, app_state, cx, |workspace, window, cx| {
-                    Editor::new_file(workspace, &Default::default(), window, cx)
-                })
-                .detach_and_log_err(cx);
+                workspace::open_new(open_options, app_state, cx, |_, _, _| {})
+                    .detach_and_log_err(cx);
             });
         }
         return Ok(());
