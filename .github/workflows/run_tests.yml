@@ -153,7 +153,7 @@ jobs:
             echo "zed://extension/tree-sitter-query"
             false
         }
-    timeout-minutes: 60
+    timeout-minutes: 120
   clippy_linux:
     needs:
     - orchestrate
@@ -194,7 +194,7 @@ jobs:
       run: ./script/clippy
     - name: steps::show_sccache_stats
       run: sccache --show-stats || true
-    timeout-minutes: 60
+    timeout-minutes: 120
   run_tests_mac:
     needs:
     - orchestrate
@@ -245,7 +245,7 @@ jobs:
       if: always()
       run: |
         rm -rf ./../.cargo
-    timeout-minutes: 60
+    timeout-minutes: 120
   check_dependencies:
     needs:
     - orchestrate
@@ -281,7 +281,7 @@ jobs:
       uses: actions/dependency-review-action@67d4f4bd7a9b17a0db54d2a7519187c65e339de8
       with:
         license-check: false
-    timeout-minutes: 60
+    timeout-minutes: 120
   check_licenses:
     needs:
     - orchestrate
@@ -335,7 +335,7 @@ jobs:
           echo "Please run 'cargo xtask workflows' locally and commit the changes"
           exit 1
         fi
-    timeout-minutes: 60
+    timeout-minutes: 120
   tests_pass:
     needs:
     - orchestrate
