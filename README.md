@@ -36,6 +36,8 @@ Now:
 Next:
 
 - center-pane tabs for external ACP agents using selected pieces of the existing ACP / `agent_ui` stack, without reviving Zed's own agent panel
+- remote project
+- session restore
 - next-edit integration
 - native alarm
 
