@@ -4346,8 +4346,7 @@ fn native_terminal_notification_center() -> Option<id> {
         return None;
     };
 
-    let center: id =
-        unsafe { msg_send![notification_center_class, defaultUserNotificationCenter] };
+    let center: id = unsafe { msg_send![notification_center_class, defaultUserNotificationCenter] };
     if center.is_null() {
         log_native_terminal_notifications_unavailable(
             "macOS native terminal notifications are unavailable: defaultUserNotificationCenter returned nil",
