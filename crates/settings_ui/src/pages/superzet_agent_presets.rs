@@ -74,6 +74,7 @@ impl AgentPresetsPage {
                 attention_patterns: Vec::new(),
             });
         draft.label = next_new_preset_label(&presets);
+        draft.attention_patterns.clear();
 
         match self
             .store
@@ -121,7 +122,7 @@ impl AgentPresetsPage {
         command_editor: &Entity<Editor>,
         args_editor: &Entity<Editor>,
         env_editor: &Entity<Editor>,
-        attention_editor: &Entity<Editor>,
+        attention_patterns: &[String],
         cx: &mut Context<Self>,
     ) {
         let draft = parse_preset_draft(
@@ -129,8 +130,11 @@ impl AgentPresetsPage {
             command_editor.read(cx).text(cx),
             args_editor.read(cx).text(cx),
             env_editor.read(cx).text(cx),
-            attention_editor.read(cx).text(cx),
-        );
+        )
+        .map(|mut draft| {
+            draft.attention_patterns = attention_patterns.to_vec();
+            draft
+        });
 
         match draft.and_then(|draft| {
             self.store
@@ -189,14 +193,6 @@ impl AgentPresetsPage {
             &render_env_lines(&preset.env),
             true,
             "KEY=VALUE per line",
-            window,
-            cx,
-        );
-        let attention_editor = preset_editor(
-            format!("superzet-preset-attention-{}", preset.id),
-            &preset.attention_patterns.join("\n"),
-            true,
-            "One attention pattern per line",
             window,
             cx,
         );
@@ -287,11 +283,6 @@ impl AgentPresetsPage {
                 Some("KEY=VALUE per line"),
                 env_editor.clone(),
             ))
-            .child(render_field(
-                "Attention Patterns",
-                Some("One match per line"),
-                attention_editor.clone(),
-            ))
             .child(
                 h_flex()
                     .justify_end()
@@ -304,12 +295,10 @@ impl AgentPresetsPage {
                                 let reset_command_editor = command_editor.clone();
                                 let reset_args_editor = args_editor.clone();
                                 let reset_env_editor = env_editor.clone();
-                                let reset_attention_editor = attention_editor.clone();
                                 let label = preset.label.clone();
                                 let command = preset.command.clone();
                                 let args = preset.args.join("\n");
                                 let env = render_env_lines(&preset.env);
-                                let attention = preset.attention_patterns.join("\n");
                                 move |this, _, window, cx| {
                                     Self::reset_editor_text(
                                         &reset_label_editor,
@@ -335,12 +324,6 @@ impl AgentPresetsPage {
                                         window,
                                         cx,
                                     );
-                                    Self::reset_editor_text(
-                                        &reset_attention_editor,
-                                        attention.clone(),
-                                        window,
-                                        cx,
-                                    );
                                     this.clear_error(cx);
                                 }
                             })),
@@ -350,6 +333,7 @@ impl AgentPresetsPage {
                             .style(ButtonStyle::Filled)
                             .on_click(cx.listener({
                                 let preset_id = preset.id.clone();
+                                let attention_patterns = preset.attention_patterns.clone();
                                 move |this, _, _, cx| {
                                     this.save_preset(
                                         &preset_id,
@@ -357,7 +341,7 @@ impl AgentPresetsPage {
                                         &command_editor,
                                         &args_editor,
                                         &env_editor,
-                                        &attention_editor,
+                                        &attention_patterns,
                                         cx,
                                     );
                                 }
@@ -514,7 +498,6 @@ fn parse_preset_draft(
     command: String,
     arguments: String,
     environment: String,
-    attention_patterns: String,
 ) -> Result<AgentPresetDraft> {
     let args = arguments
         .lines()
@@ -539,18 +522,11 @@ fn parse_preset_draft(
         environment_map.insert(key.to_string(), value.trim().to_string());
     }
 
-    let attention_patterns = attention_patterns
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-
     Ok(AgentPresetDraft {
         label,
         command,
         args,
         env: environment_map,
-        attention_patterns,
+        attention_patterns: Vec::new(),
     })
 }

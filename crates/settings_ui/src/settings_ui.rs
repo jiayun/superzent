@@ -8,10 +8,10 @@ use futures::{StreamExt, channel::mpsc};
 use fuzzy::StringMatchCandidate;
 use gpui::{
     Action, App, AsyncApp, ClipboardItem, DEFAULT_ADDITIONAL_WINDOW_SIZE, Div, Entity, FocusHandle,
-    Focusable, Global, KeyContext, ListState, ReadGlobal as _, ScrollHandle, Stateful,
-    Subscription, Task, Tiling, TitlebarOptions, UniformListScrollHandle, WeakEntity, Window,
-    WindowBounds, WindowHandle, WindowOptions, actions, div, list, point, prelude::*, px,
-    uniform_list,
+    Focusable, Global, KeyContext, ListState, MouseButton, NavigationDirection, ReadGlobal as _,
+    ScrollHandle, Stateful, Subscription, Task, Tiling, TitlebarOptions, UniformListScrollHandle,
+    WeakEntity, Window, WindowBounds, WindowHandle, WindowOptions, actions, div, list, point,
+    prelude::*, px, uniform_list,
 };
 
 use language::Buffer;
@@ -1767,6 +1767,9 @@ impl SettingsWindow {
                 move |this: &mut SettingsWindow,
                       window: &mut Window,
                       cx: &mut Context<SettingsWindow>| {
+                    if !this.sub_page_stack.is_empty() {
+                        return;
+                    }
                     this.open_and_scroll_to_navbar_entry(entry_index, None, false, window, cx);
                 },
             );
@@ -3665,6 +3668,14 @@ impl Render for SettingsWindow {
                         .id("settings-window")
                         .key_context("SettingsWindow")
                         .track_focus(&self.focus_handle)
+                        .on_mouse_down(
+                            MouseButton::Navigate(NavigationDirection::Back),
+                            |_, _, cx| cx.stop_propagation(),
+                        )
+                        .on_mouse_down(
+                            MouseButton::Navigate(NavigationDirection::Forward),
+                            |_, _, cx| cx.stop_propagation(),
+                        )
                         .on_action(cx.listener(|this, _: &OpenCurrentFile, window, cx| {
                             this.open_current_settings_file(window, cx);
                         }))

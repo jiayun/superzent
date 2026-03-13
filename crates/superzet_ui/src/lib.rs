@@ -398,8 +398,10 @@ fn render_terminal_preset_bar(
         (workspace_entry, store.presets().to_vec())
     };
 
-    let (visible_presets, hidden_presets) =
-        split_presets_for_width(&presets, estimated_preset_bar_width(window));
+    let (visible_presets, hidden_presets) = split_presets_for_width(
+        &presets,
+        available_preset_bar_width(&workspace_handle, window, cx),
+    );
     let hidden_dropdown = (!hidden_presets.is_empty()).then(|| {
         render_hidden_preset_dropdown(
             workspace_handle.clone(),
@@ -524,9 +526,16 @@ fn render_hidden_preset_dropdown(
     .into_any_element()
 }
 
-fn estimated_preset_bar_width(window: &Window) -> Pixels {
-    let width = (f32::from(window.viewport_size().width) * 0.5).clamp(180.0, 560.0);
-    px(width)
+fn available_preset_bar_width(
+    workspace_handle: &Entity<Workspace>,
+    window: &Window,
+    cx: &Context<Pane>,
+) -> Pixels {
+    workspace_handle
+        .read(cx)
+        .bounding_box_for_pane(&cx.entity())
+        .map(|bounds| bounds.size.width)
+        .unwrap_or_else(|| window.viewport_size().width)
 }
 
 fn split_presets_for_width(
