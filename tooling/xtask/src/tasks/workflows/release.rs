@@ -54,7 +54,7 @@ fn download_workflow_artifacts() -> Step<Use> {
     named::uses(
         "actions",
         "download-artifact",
-        "70fc10eb3fdc3a884b88c9f72e79bb36de8d0f6e", // v8.0.0
+        "018cc2cf5baa6db3ef3c5f8a56943fffe632ef53", // v6.0.0
     )
     .add_with(("path", "./artifacts/"))
 }
