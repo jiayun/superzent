@@ -738,9 +738,7 @@ impl AutoUpdater {
         let mut response = http_client
             .get(url.as_str(), Default::default(), true)
             .await
-            .map_err(|error| ReleaseLookupError::QueryFailed {
-                source: error.into(),
-            })?;
+            .map_err(|error| ReleaseLookupError::QueryFailed { source: error })?;
         let mut body = Vec::new();
         response
             .body_mut()
@@ -771,9 +769,7 @@ impl AutoUpdater {
                     String::from_utf8_lossy(&body),
                 )
             })
-            .map_err(|error| ReleaseLookupError::QueryFailed {
-                source: error.into(),
-            })?)
+            .map_err(|error| ReleaseLookupError::QueryFailed { source: error })?)
     }
 
     async fn update(this: Entity<Self>, cx: &mut AsyncApp) -> Result<()> {
