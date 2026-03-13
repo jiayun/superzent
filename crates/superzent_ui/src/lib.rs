@@ -4330,6 +4330,35 @@ fn native_terminal_notification_channel() -> &'static NativeTerminalNotification
 }
 
 #[cfg(target_os = "macos")]
+fn log_native_terminal_notifications_unavailable(message: &str) {
+    static DID_LOG: OnceLock<()> = OnceLock::new();
+    if DID_LOG.set(()).is_ok() {
+        log::warn!("{message}");
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn native_terminal_notification_center() -> Option<id> {
+    let Some(notification_center_class) = Class::get("NSUserNotificationCenter") else {
+        log_native_terminal_notifications_unavailable(
+            "macOS native terminal notifications are unavailable: NSUserNotificationCenter class is missing",
+        );
+        return None;
+    };
+
+    let center: id =
+        unsafe { msg_send![notification_center_class, defaultUserNotificationCenter] };
+    if center.is_null() {
+        log_native_terminal_notifications_unavailable(
+            "macOS native terminal notifications are unavailable: defaultUserNotificationCenter returned nil",
+        );
+        return None;
+    }
+
+    Some(center)
+}
+
+#[cfg(target_os = "macos")]
 fn native_terminal_notification_delegate_class() -> &'static Class {
     static DELEGATE_CLASS: OnceLock<&'static Class> = OnceLock::new();
 
@@ -4356,28 +4385,39 @@ fn native_terminal_notification_delegate_class() -> &'static Class {
 }
 
 #[cfg(target_os = "macos")]
-fn install_native_terminal_notification_delegate() {
-    static DELEGATE: OnceLock<usize> = OnceLock::new();
+fn install_native_terminal_notification_delegate() -> bool {
+    static DELEGATE: OnceLock<Option<usize>> = OnceLock::new();
 
-    let delegate = *DELEGATE.get_or_init(|| unsafe {
+    let Some(delegate) = *DELEGATE.get_or_init(|| unsafe {
         let delegate: id = msg_send![native_terminal_notification_delegate_class(), new];
-        delegate as usize
-    });
-
-    let center: id = unsafe {
-        msg_send![
-            class!(NSUserNotificationCenter),
-            defaultUserNotificationCenter
-        ]
+        if delegate.is_null() {
+            log_native_terminal_notifications_unavailable(
+                "macOS native terminal notifications are unavailable: failed to allocate notification delegate",
+            );
+            None
+        } else {
+            Some(delegate as usize)
+        }
+    }) else {
+        return false;
     };
+
+    let Some(center) = native_terminal_notification_center() else {
+        return false;
+    };
+
     unsafe {
         let _: () = msg_send![center, setDelegate: delegate as id];
     }
+
+    true
 }
 
 #[cfg(target_os = "macos")]
 fn take_native_terminal_notification_activation_receiver() -> Option<SmolReceiver<String>> {
-    install_native_terminal_notification_delegate();
+    if !install_native_terminal_notification_delegate() {
+        return None;
+    }
 
     match native_terminal_notification_channel().receiver.lock() {
         Ok(mut receiver) => receiver.take(),
@@ -4390,15 +4430,17 @@ fn take_native_terminal_notification_activation_receiver() -> Option<SmolReceive
 
 #[cfg(target_os = "macos")]
 fn dispatch_native_terminal_notification(title: &str, body: &str, workspace_id: &str) {
-    install_native_terminal_notification_delegate();
+    if !install_native_terminal_notification_delegate() {
+        return;
+    }
+
+    let Some(center) = native_terminal_notification_center() else {
+        return;
+    };
 
     unsafe {
         let pool = NSAutoreleasePool::new(nil);
         let notification: id = msg_send![class!(NSUserNotification), new];
-        let center: id = msg_send![
-            class!(NSUserNotificationCenter),
-            defaultUserNotificationCenter
-        ];
 
         let _: () = msg_send![notification, setTitle: ns_string(title)];
         let _: () = msg_send![notification, setInformativeText: ns_string(body)];
