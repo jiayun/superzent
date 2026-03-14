@@ -26,7 +26,7 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime},
 };
-use util::command::new_command;
+use util::command::{new_command, new_std_command};
 use workspace::{
     Workspace,
     notifications::{
@@ -42,6 +42,8 @@ const DEFAULT_RELEASES_URL: &str = "https://releases.nangman.ai";
 const UP_TO_DATE_MESSAGE: &str = "Superzent is already up to date.";
 const UPDATE_QUERY_FAILED_MESSAGE: &str = "Failed to check for updates. Please try again.";
 const UPDATE_PACKAGE_NOT_FOUND_MESSAGE: &str = "A compatible update package was not found for this installation. Please download the latest release manually.";
+const MACOS_PENDING_UPDATE_SUFFIX: &str = ".pending-update";
+const MACOS_PREVIOUS_APP_SUFFIX: &str = ".previous";
 
 fn update_explanation_from_compile_env() -> Option<&'static str> {
     option_env!("SUPERZENT_UPDATE_EXPLANATION").or(option_env!("ZED_UPDATE_EXPLANATION"))
@@ -178,6 +180,11 @@ pub struct ReleaseAsset {
 struct MacOsUnmounter<'a> {
     mount_path: PathBuf,
     background_executor: &'a BackgroundExecutor,
+}
+
+struct MacOsAppUpdatePaths {
+    staged_app_path: PathBuf,
+    previous_app_path: PathBuf,
 }
 
 impl Drop for MacOsUnmounter<'_> {
@@ -1146,6 +1153,7 @@ async fn install_release_macos(
     let running_app_filename = running_app_path
         .file_name()
         .with_context(|| format!("invalid running app path {running_app_path:?}"))?;
+    let update_paths = macos_app_update_paths(&running_app_path)?;
 
     let mount_path = temp_dir.path().join("superzent");
     let mut mounted_app_path: OsString = mount_path.join(running_app_filename).into();
@@ -1171,6 +1179,17 @@ async fn install_release_macos(
         background_executor: cx.background_executor(),
     };
 
+    remove_directory_if_exists(&update_paths.staged_app_path).await?;
+    remove_directory_if_exists(&update_paths.previous_app_path).await?;
+    fs::create_dir_all(&update_paths.staged_app_path)
+        .await
+        .with_context(|| {
+            format!(
+                "failed to create staged macOS app directory {:?}",
+                update_paths.staged_app_path
+            )
+        })?;
+
     let output = new_command("rsync")
         .args([
             "-av",
@@ -1182,7 +1201,7 @@ async fn install_release_macos(
             "--no-group",
         ])
         .arg(&mounted_app_path)
-        .arg(&running_app_path)
+        .arg(&update_paths.staged_app_path)
         .output()
         .await?;
 
@@ -1192,7 +1211,96 @@ async fn install_release_macos(
         String::from_utf8_lossy(&output.stderr)
     );
 
-    Ok(None)
+    fs::rename(&running_app_path, &update_paths.previous_app_path)
+        .await
+        .with_context(|| {
+            format!(
+                "failed to move current macOS app from {:?} to {:?}",
+                running_app_path, update_paths.previous_app_path
+            )
+        })?;
+
+    if let Err(error) = fs::rename(&update_paths.staged_app_path, &running_app_path).await {
+        let install_error = anyhow!(error).context(format!(
+            "failed to move staged macOS app from {:?} to {:?}",
+            update_paths.staged_app_path, running_app_path
+        ));
+        if let Err(rollback_error) =
+            fs::rename(&update_paths.previous_app_path, &running_app_path).await
+        {
+            return Err(install_error.context(format!(
+                "failed to restore previous macOS app from {:?}: {:?}",
+                update_paths.previous_app_path, rollback_error
+            )));
+        }
+        return Err(install_error);
+    }
+
+    if let Err(error) = spawn_macos_previous_app_cleanup(&update_paths.previous_app_path) {
+        log::warn!(
+            "failed to schedule cleanup for previous macOS app {:?}: {:?}",
+            update_paths.previous_app_path,
+            error
+        );
+    }
+
+    Ok(Some(running_app_path))
+}
+
+fn macos_app_update_paths(running_app_path: &Path) -> Result<MacOsAppUpdatePaths> {
+    Ok(MacOsAppUpdatePaths {
+        staged_app_path: macos_hidden_sibling_path(running_app_path, MACOS_PENDING_UPDATE_SUFFIX)?,
+        previous_app_path: macos_hidden_sibling_path(running_app_path, MACOS_PREVIOUS_APP_SUFFIX)?,
+    })
+}
+
+fn macos_hidden_sibling_path(path: &Path, suffix: &str) -> Result<PathBuf> {
+    let parent = path
+        .parent()
+        .with_context(|| format!("invalid app path without parent {path:?}"))?;
+    let file_name = path
+        .file_name()
+        .with_context(|| format!("invalid app path without file name {path:?}"))?;
+
+    let mut hidden_name = OsString::from(".");
+    hidden_name.push(file_name);
+    hidden_name.push(suffix);
+
+    Ok(parent.join(hidden_name))
+}
+
+async fn remove_directory_if_exists(path: &Path) -> Result<()> {
+    match fs::remove_dir_all(path).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => {
+            Err(error).with_context(|| format!("failed to remove existing directory {:?}", path))
+        }
+    }
+}
+
+fn spawn_macos_previous_app_cleanup(previous_app_path: &Path) -> Result<()> {
+    let current_process_id = std::process::id().to_string();
+    let cleanup_script = r#"
+        while kill -0 $0 2> /dev/null; do
+            sleep 0.1
+        done
+        rm -rf "$1"
+    "#;
+
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "The cleanup helper must outlive the current process"
+    )]
+    new_std_command("/bin/bash")
+        .arg("-c")
+        .arg(cleanup_script)
+        .arg(current_process_id)
+        .arg(previous_app_path)
+        .spawn()
+        .context("failed to spawn macOS cleanup helper")?;
+
+    Ok(())
 }
 
 async fn cleanup_windows() -> Result<()> {
@@ -1344,6 +1452,34 @@ mod tests {
             latest_stable_release_page_url()
         });
         assert_eq!(url, "https://stable.example.com/releases/stable/latest");
+    }
+
+    #[test]
+    fn test_macos_hidden_sibling_path() {
+        let path = Path::new("/Applications/superzent.app");
+
+        let hidden_path = macos_hidden_sibling_path(path, MACOS_PENDING_UPDATE_SUFFIX).unwrap();
+
+        assert_eq!(
+            hidden_path,
+            PathBuf::from("/Applications/.superzent.app.pending-update")
+        );
+    }
+
+    #[test]
+    fn test_macos_app_update_paths() {
+        let path = Path::new("/Applications/superzent.app");
+
+        let update_paths = macos_app_update_paths(path).unwrap();
+
+        assert_eq!(
+            update_paths.staged_app_path,
+            PathBuf::from("/Applications/.superzent.app.pending-update")
+        );
+        assert_eq!(
+            update_paths.previous_app_path,
+            PathBuf::from("/Applications/.superzent.app.previous")
+        );
     }
 
     #[test]
