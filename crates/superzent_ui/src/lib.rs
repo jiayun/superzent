@@ -3208,7 +3208,7 @@ fn run_new_workspace(
         && let Some(project_root) = primary_workspace.local_worktree_path().map(PathBuf::from)
     {
         let project_name = project.name.clone();
-        let workspace_id = primary_workspace.id.clone();
+        let workspace_id = primary_workspace.id;
         let prompt = window.prompt(
             PromptLevel::Info,
             "Initialize Git?",
@@ -3218,9 +3218,7 @@ fn run_new_workspace(
             &["Initialize Git", "Cancel"],
             cx,
         );
-        let store = store.clone();
         let workspace_handle = cx.entity().downgrade();
-        let project = project.clone();
 
         cx.spawn_in(window, async move |_, cx| {
             if prompt.await != Ok(0) {
