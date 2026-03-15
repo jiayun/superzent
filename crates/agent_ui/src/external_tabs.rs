@@ -212,6 +212,11 @@ pub fn active_external_acp_agent_name_in_pane(pane: &Pane, cx: &App) -> Option<S
         })
 }
 
+pub fn pane_has_external_acp_item(pane: &Pane) -> bool {
+    pane.active_item_as::<ExternalAcpTabItem>().is_some()
+        || pane.active_item_as::<ExternalAcpHistoryItem>().is_some()
+}
+
 pub fn focus_external_acp_tab(
     workspace: &mut Workspace,
     window: &mut Window,

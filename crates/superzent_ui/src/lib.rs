@@ -4,7 +4,7 @@ mod acp_tabs;
 pub use acp_tabs::{FocusAcpTab, NewAcpTab, OpenAcpHistory};
 
 #[cfg(feature = "acp_tabs")]
-use agent_ui::{active_external_acp_agent_name_in_pane, open_external_acp_tab};
+use agent_ui::{open_external_acp_tab, pane_has_external_acp_item};
 use anyhow::Result;
 use chrono::Utc;
 #[cfg(target_os = "macos")]
@@ -496,21 +496,14 @@ fn render_terminal_preset_bar(
     let store = SuperzentStore::try_global(cx)?;
     let (workspace_entry, presets) = {
         let store = store.read(cx);
-        let workspace_entry =
-            if let Some(location) = workspace_location_snapshot(&workspace_handle, cx) {
-                store.workspace_for_location(&location).cloned()
-            } else {
-                None
-            }
-            .or_else(|| store.active_workspace().cloned())?;
-
+        let workspace_entry = store.active_workspace().cloned()?;
         (workspace_entry, store.presets().to_vec())
     };
 
     let active_acp_history_button = render_active_acp_history_button(pane, &workspace_entry.id, cx);
     let (visible_presets, hidden_presets) = split_presets_for_width(
         &presets,
-        available_preset_bar_width(&workspace_handle, window, cx),
+        available_preset_bar_width(window),
         active_acp_history_button.is_some(),
     );
     let hidden_dropdown = (!hidden_presets.is_empty()).then(|| {
@@ -630,16 +623,8 @@ fn render_hidden_preset_dropdown(
     .into_any_element()
 }
 
-fn available_preset_bar_width(
-    workspace_handle: &Entity<Workspace>,
-    window: &Window,
-    cx: &Context<Pane>,
-) -> Pixels {
-    workspace_handle
-        .read(cx)
-        .bounding_box_for_pane(&cx.entity())
-        .map(|bounds| bounds.size.width)
-        .unwrap_or_else(|| window.viewport_size().width)
+fn available_preset_bar_width(window: &Window) -> Pixels {
+    window.viewport_size().width
 }
 
 fn split_presets_for_width(
@@ -703,16 +688,16 @@ fn open_agent_presets_settings(window: &mut Window, cx: &mut App) {
 fn render_active_acp_history_button(
     pane: &Pane,
     workspace_id: &str,
-    cx: &mut Context<Pane>,
+    _cx: &mut Context<Pane>,
 ) -> Option<AnyElement> {
-    let agent_name = active_external_acp_agent_name_in_pane(pane, cx)?;
+    if !pane_has_external_acp_item(pane) {
+        return None;
+    }
     Some(
         Button::new(format!("superzent-acp-history-{workspace_id}"), "History")
             .label_size(LabelSize::Small)
             .style(ButtonStyle::Subtle)
-            .on_click(move |_, window, cx| {
-                open_acp_history(Some(agent_name.clone()), window, cx);
-            })
+            .on_click(move |_, window, cx| open_acp_history(None, window, cx))
             .into_any_element(),
     )
 }
