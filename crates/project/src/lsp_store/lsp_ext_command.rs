@@ -630,25 +630,21 @@ impl LspCommand for GetLspRunnables {
                 .as_ref()
                 .map(|location| location.target_uri.to_string());
             let location = match runnable.location {
-                Some(location) => match location_link_from_lsp(
-                    location,
-                    &lsp_store,
-                    &buffer,
-                    server_id,
-                    &mut cx,
-                )
-                .await
-                {
-                    Ok(location) => Some(location),
-                    Err(error) => {
-                        log::debug!(
-                            "Skipping unresolved LSP runnable location for `{}` ({}): {error}",
-                            runnable.label,
-                            target_uri.as_deref().unwrap_or("unknown target"),
-                        );
-                        None
+                Some(location) => {
+                    match location_link_from_lsp(location, &lsp_store, &buffer, server_id, &mut cx)
+                        .await
+                    {
+                        Ok(location) => Some(location),
+                        Err(error) => {
+                            log::debug!(
+                                "Skipping unresolved LSP runnable location for `{}` ({}): {error}",
+                                runnable.label,
+                                target_uri.as_deref().unwrap_or("unknown target"),
+                            );
+                            None
+                        }
                     }
-                },
+                }
                 None => None,
             };
             let mut task_template = TaskTemplate::default();
@@ -775,8 +771,7 @@ impl LspCommand for GetLspRunnables {
         };
 
         for lsp_runnable in message.runnables {
-            let task_template: TaskTemplate =
-                serde_json::from_slice(&lsp_runnable.task_template)
+            let task_template: TaskTemplate = serde_json::from_slice(&lsp_runnable.task_template)
                 .context("deserializing task template from proto")?;
             let location = match lsp_runnable.location {
                 Some(location) => {
