@@ -1,5 +1,7 @@
 use crate::ConnectionView;
-use crate::{AgentPanel, RemoveHistory, RemoveSelectedThread};
+use crate::{
+    AgentPanel, RemoveHistory, RemoveSelectedThread, open_session_in_active_external_acp_tab,
+};
 use acp_thread::{AgentSessionInfo, AgentSessionList, AgentSessionListRequest, SessionListUpdate};
 use agent_client_protocol as acp;
 use chrono::{Datelike as _, Local, NaiveDate, TimeDelta, Utc};
@@ -1036,6 +1038,15 @@ impl RenderOnce for HistoryEntryElement {
                         if let Some(panel) = workspace.read(cx).panel::<AgentPanel>(cx) {
                             panel.update(cx, |panel, cx| {
                                 panel.load_agent_thread(entry.clone(), window, cx);
+                            });
+                        } else {
+                            workspace.update(cx, |workspace, cx| {
+                                open_session_in_active_external_acp_tab(
+                                    workspace,
+                                    entry.clone(),
+                                    window,
+                                    cx,
+                                );
                             });
                         }
                     }
