@@ -1445,15 +1445,18 @@ async fn resolve_remote_project_workspace(
         })?
         .ok_or_else(|| anyhow::anyhow!("missing primary workspace for remote project"))?;
 
-    let primary_live_workspace =
-        cx.update(|window, cx| workspace_for_entry_in_window(window, cx, &primary_workspace))?;
+    let primary_live_workspace = cx.update(|window, cx| {
+        workspace_for_entry_in_window(window, cx, &primary_workspace)
+            .or_else(|| workspace_for_entry_in_any_window(&primary_workspace, cx))
+    })?;
 
     let project_live_workspace = cx.update(|window, cx| {
+        let store = store.read(cx);
         store
-            .read(cx)
             .workspaces_for_project(&project.id)
             .into_iter()
             .find_map(|workspace_entry| workspace_for_entry_in_window(window, cx, workspace_entry))
+            .or_else(|| workspace_for_project_in_any_window(&project.id, &store, cx))
     })?;
 
     if let Some(live_workspace) = primary_live_workspace.or_else(|| {
@@ -2708,17 +2711,12 @@ impl SuperzentSidebar {
                                     })
                                     .on_click(cx.listener(
                                         move |this, _: &ClickEvent, window, cx| {
-                                            this.store.update(cx, |store, cx| {
-                                                store.set_active_workspace(
-                                                    Some(workspace_for_delete.id.clone()),
-                                                    cx,
-                                                );
-                                            });
                                             if let Some(current_workspace) =
                                                 this.current_workspace_entity(cx)
                                             {
                                                 run_delete_workspace_from_store(
                                                     current_workspace,
+                                                    workspace_for_delete.clone(),
                                                     window,
                                                     cx,
                                                 );
@@ -3811,6 +3809,16 @@ fn run_delete_workspace(
         );
         return;
     };
+    run_delete_workspace_entry(workspace, workspace_entry, window, cx);
+}
+
+fn run_delete_workspace_entry(
+    workspace: &mut Workspace,
+    workspace_entry: WorkspaceEntry,
+    window: &mut gpui::Window,
+    cx: &mut Context<Workspace>,
+) {
+    let store = SuperzentStore::global(cx);
     if workspace_entry.kind == WorkspaceKind::Primary || !workspace_entry.managed {
         workspace.show_toast(
             Toast::new(
@@ -3831,6 +3839,8 @@ fn run_delete_workspace(
         );
         return;
     };
+    let reopen_primary_in_current_window =
+        current_window_matches_workspace_entry(window, &workspace_entry, cx);
 
     let prompt = window.prompt(
         PromptLevel::Warning,
@@ -3862,9 +3872,14 @@ fn run_delete_workspace(
                 .await
             }
             ProjectLocation::Ssh { .. } => {
-                let (project_workspace, primary_workspace) =
-                    resolve_remote_project_workspace(&project, &store, app_state.clone(), true, cx)
-                        .await?;
+                let (project_workspace, _) = resolve_remote_project_workspace(
+                    &project,
+                    &store,
+                    app_state.clone(),
+                    false,
+                    cx,
+                )
+                .await?;
 
                 let repository = cx.update(|_, cx| {
                     active_repository_for_workspace(&project_workspace, cx)
@@ -3879,11 +3894,6 @@ fn run_delete_workspace(
                     repository.remove_worktree(target_path, false)
                 });
                 receiver.await??;
-
-                let open_primary_task = cx.update(|window, cx| {
-                    open_workspace_entry(primary_workspace.clone(), app_state.clone(), window, cx)
-                })?;
-                open_primary_task.await?;
                 Ok(())
             }
         };
@@ -3900,16 +3910,16 @@ fn run_delete_workspace(
                     ),
                     cx,
                 );
-                if let Some(primary_workspace) = store
-                    .read(cx)
-                    .primary_workspace_for_project(&project.id)
-                    .cloned()
-                {
-                    store.update(cx, |store, cx| {
-                        store.record_workspace_opened(&primary_workspace.id, cx);
-                    });
-                    if workspace_entry.local_worktree_path().is_some() {
-                        open_workspace_entry(
+                if reopen_primary_in_current_window {
+                    if let Some(primary_workspace) = store
+                        .read(cx)
+                        .primary_workspace_for_project(&project.id)
+                        .cloned()
+                    {
+                        store.update(cx, |store, cx| {
+                            store.record_workspace_opened(&primary_workspace.id, cx);
+                        });
+                        focus_existing_or_open_workspace_entry(
                             primary_workspace,
                             workspace.app_state().clone(),
                             window,
@@ -4196,11 +4206,12 @@ fn show_project_close_toast(
 
 fn run_delete_workspace_from_store(
     workspace_handle: Entity<Workspace>,
+    workspace_entry: WorkspaceEntry,
     window: &mut gpui::Window,
     cx: &mut App,
 ) {
     workspace_handle.update(cx, |workspace, cx| {
-        run_delete_workspace(workspace, window, cx);
+        run_delete_workspace_entry(workspace, workspace_entry.clone(), window, cx);
     });
 }
 
@@ -4324,6 +4335,38 @@ fn open_workspace_entry(
     }
 }
 
+fn focus_existing_or_open_workspace_entry(
+    workspace_entry: WorkspaceEntry,
+    app_state: Arc<WorkspaceAppState>,
+    window: &mut gpui::Window,
+    cx: &mut App,
+) -> Task<anyhow::Result<()>> {
+    if let Some(target_window) = notification_window_for_workspace_entry(&workspace_entry, cx) {
+        return cx.spawn({
+            let workspace_entry = workspace_entry.clone();
+            async move |cx| {
+                target_window.update(cx, |multi_workspace, window, cx| {
+                    let Some(live_workspace) = multi_workspace
+                        .workspaces()
+                        .iter()
+                        .find(|workspace| workspace_matches_entry(workspace, &workspace_entry, cx))
+                        .cloned()
+                    else {
+                        anyhow::bail!("failed to locate open workspace");
+                    };
+
+                    window.activate_window();
+                    multi_workspace.activate(live_workspace, cx);
+                    Ok(())
+                })??;
+                Ok(())
+            }
+        });
+    }
+
+    open_workspace_entry(workspace_entry, app_state, window, cx)
+}
+
 fn workspace_from_window(window: &gpui::Window, cx: &App) -> Option<Entity<Workspace>> {
     let multi_workspace = window.window_handle().downcast::<MultiWorkspace>()?;
     let multi_workspace = multi_workspace.read(cx).ok()?;
@@ -4387,6 +4430,67 @@ fn workspace_for_entry_in_window(
 
     workspace_from_window(window, cx)
         .filter(|workspace| workspace_matches_entry(workspace, workspace_entry, cx))
+}
+
+fn workspace_for_entry_in_any_window(
+    workspace_entry: &WorkspaceEntry,
+    cx: &App,
+) -> Option<Entity<Workspace>> {
+    ordered_multi_workspace_windows(cx)
+        .into_iter()
+        .find_map(|window| {
+            window
+                .read_with(cx, |multi_workspace, cx| {
+                    multi_workspace
+                        .workspaces()
+                        .iter()
+                        .find(|workspace| workspace_matches_entry(workspace, workspace_entry, cx))
+                        .cloned()
+                })
+                .ok()
+                .flatten()
+        })
+}
+
+fn workspace_for_project_in_any_window(
+    project_id: &str,
+    store: &SuperzentStore,
+    cx: &App,
+) -> Option<Entity<Workspace>> {
+    let project_workspaces = store
+        .workspaces_for_project(project_id)
+        .into_iter()
+        .cloned()
+        .collect::<Vec<_>>();
+
+    ordered_multi_workspace_windows(cx)
+        .into_iter()
+        .find_map(|window| {
+            window
+                .read_with(cx, |multi_workspace, cx| {
+                    project_workspaces.iter().find_map(|workspace_entry| {
+                        multi_workspace
+                            .workspaces()
+                            .iter()
+                            .find(|workspace| {
+                                workspace_matches_entry(workspace, workspace_entry, cx)
+                            })
+                            .cloned()
+                    })
+                })
+                .ok()
+                .flatten()
+        })
+}
+
+fn current_window_matches_workspace_entry(
+    window: &Window,
+    workspace_entry: &WorkspaceEntry,
+    cx: &App,
+) -> bool {
+    workspace_from_window(window, cx)
+        .as_ref()
+        .is_some_and(|workspace| workspace_matches_entry(workspace, workspace_entry, cx))
 }
 
 fn ordered_multi_workspace_windows(cx: &App) -> Vec<WindowHandle<MultiWorkspace>> {
