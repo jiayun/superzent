@@ -3367,7 +3367,6 @@ impl SuperzentRightSidebar {
         let store = SuperzentStore::global(cx);
         let mut subscriptions = vec![cx.observe(&store, |_, _, cx| cx.notify())];
         subscriptions.push(cx.observe_in(&right_dock, window, {
-            let workspace = workspace.clone();
             move |this, dock, window, cx| {
                 this.restore_active_sidebar(workspace.clone(), dock, window, cx);
             }
