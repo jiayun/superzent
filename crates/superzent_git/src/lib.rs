@@ -32,6 +32,14 @@ pub struct WorkspaceRefresh {
     pub git_summary: Option<GitChangeSummary>,
 }
 
+#[derive(Clone, Debug)]
+pub struct DiscoveredWorktree {
+    pub path: PathBuf,
+    pub branch: String,
+    pub git_status: WorkspaceGitStatus,
+    pub git_summary: Option<GitChangeSummary>,
+}
+
 #[derive(Debug)]
 struct LocalProjectMetadata {
     project_root: PathBuf,
@@ -197,13 +205,25 @@ pub fn delete_workspace(workspace: &WorkspaceEntry, repo_root: &Path, force: boo
     )?;
 
     let mut args = vec!["worktree", "remove"];
+    let force = force || workspace.git_status == WorkspaceGitStatus::Unavailable;
     if force {
         args.push("--force");
     }
     let worktree_path = worktree_path.to_string_lossy().to_string();
     args.push(worktree_path.as_str());
 
-    run_git(repo_root, &args)
+    match run_git(repo_root, &args) {
+        Ok(()) => Ok(()),
+        Err(error)
+            if workspace.git_status == WorkspaceGitStatus::Unavailable
+                || should_remove_workspace_path_after_git_failure(&error) =>
+        {
+            remove_workspace_path(Path::new(&worktree_path)).with_context(|| {
+                format!("failed to remove workspace path after git worktree remove failed: {error:#}")
+            })
+        }
+        Err(error) => Err(error),
+    }
 }
 
 pub fn refresh_workspace_path(worktree_path: &Path) -> Result<WorkspaceRefresh> {
@@ -220,6 +240,31 @@ pub fn refresh_workspace_path(worktree_path: &Path) -> Result<WorkspaceRefresh> 
         git_status: WorkspaceGitStatus::Unavailable,
         git_summary: None,
     })
+}
+
+pub fn discover_worktrees(repo_hint: &Path) -> Result<Vec<DiscoveredWorktree>> {
+    let repo_root = discover_repo_root(repo_hint)?;
+    let output = git_output(&repo_root, &["worktree", "list", "--porcelain"])?;
+
+    Ok(parse_worktree_paths(&output)
+        .into_iter()
+        .filter(|worktree_path| worktree_path.exists())
+        .map(|worktree_path| {
+            let refresh =
+                refresh_workspace_path(&worktree_path).unwrap_or_else(|_| WorkspaceRefresh {
+                    branch: NO_GIT_BRANCH_LABEL.to_string(),
+                    git_status: WorkspaceGitStatus::Unavailable,
+                    git_summary: None,
+                });
+
+            DiscoveredWorktree {
+                path: worktree_path,
+                branch: refresh.branch,
+                git_status: refresh.git_status,
+                git_summary: refresh.git_summary,
+            }
+        })
+        .collect())
 }
 
 pub fn initialize_git_repository(project_root: &Path) -> Result<WorkspaceRefresh> {
@@ -273,6 +318,37 @@ fn git_common_dir(repo_hint: &Path) -> Result<PathBuf> {
         &["rev-parse", "--path-format=absolute", "--git-common-dir"],
     )?;
     Ok(PathBuf::from(output.trim()))
+}
+
+fn parse_worktree_paths(raw_worktrees: &str) -> Vec<PathBuf> {
+    raw_worktrees
+        .lines()
+        .filter_map(|line| line.strip_prefix("worktree ").map(PathBuf::from))
+        .collect()
+}
+
+fn remove_workspace_path(path: &Path) -> Result<()> {
+    let metadata = fs::symlink_metadata(path)
+        .with_context(|| format!("failed to inspect workspace path {}", path.display()))?;
+
+    if metadata.file_type().is_dir() {
+        fs::remove_dir_all(path)
+            .with_context(|| format!("failed to remove workspace directory {}", path.display()))?;
+    } else {
+        fs::remove_file(path)
+            .with_context(|| format!("failed to remove workspace path {}", path.display()))?;
+    }
+
+    Ok(())
+}
+
+fn should_remove_workspace_path_after_git_failure(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        let message = cause.to_string();
+        message.contains("not a git repository")
+            || message.contains("is not a git repository")
+            || message.contains("not a repository")
+    })
 }
 
 fn ensure_clean_worktree(repo_hint: &Path) -> Result<()> {
@@ -811,6 +887,88 @@ mod tests {
         );
 
         delete_workspace(&outcome.workspace, repo.repo_path.as_path(), true).unwrap();
+    }
+
+    #[test]
+    fn delete_workspace_removes_stale_path_when_git_is_unavailable() {
+        let repo = init_repo();
+        let registration = register_project(&repo.repo_path, "codex").unwrap();
+        let outcome = create_workspace(
+            &registration.project,
+            "codex",
+            CreateWorkspaceOptions {
+                branch_name: "feature/stale-delete".to_string(),
+            },
+        )
+        .unwrap();
+
+        let worktree_path = outcome
+            .workspace
+            .local_worktree_path()
+            .expect("workspace should be local")
+            .to_path_buf();
+        let mut unavailable_workspace = outcome.workspace.clone();
+        unavailable_workspace.git_status = WorkspaceGitStatus::Unavailable;
+
+        fs::remove_dir_all(repo.repo_path.join(".git")).unwrap();
+
+        delete_workspace(&unavailable_workspace, repo.repo_path.as_path(), false).unwrap();
+
+        assert!(!worktree_path.exists());
+    }
+
+    #[test]
+    fn delete_workspace_removes_stale_path_when_git_metadata_is_stale() {
+        let repo = init_repo();
+        let registration = register_project(&repo.repo_path, "codex").unwrap();
+        let outcome = create_workspace(
+            &registration.project,
+            "codex",
+            CreateWorkspaceOptions {
+                branch_name: "feature/stale-delete-metadata".to_string(),
+            },
+        )
+        .unwrap();
+
+        let worktree_path = outcome
+            .workspace
+            .local_worktree_path()
+            .expect("workspace should be local")
+            .to_path_buf();
+
+        fs::remove_dir_all(repo.repo_path.join(".git")).unwrap();
+
+        delete_workspace(&outcome.workspace, repo.repo_path.as_path(), false).unwrap();
+
+        assert!(!worktree_path.exists());
+    }
+
+    #[test]
+    fn discover_worktrees_includes_primary_and_linked_worktrees() {
+        let repo = init_repo();
+        let registration = register_project(&repo.repo_path, "codex").unwrap();
+        let outcome = create_workspace(
+            &registration.project,
+            "codex",
+            CreateWorkspaceOptions {
+                branch_name: "feature/discover-worktrees".to_string(),
+            },
+        )
+        .unwrap();
+
+        let worktrees = discover_worktrees(&repo.repo_path).unwrap();
+        let paths = worktrees
+            .into_iter()
+            .map(|worktree| worktree.path)
+            .collect::<Vec<_>>();
+
+        assert!(paths.iter().any(|path| path == &repo.repo_path));
+        assert!(paths.iter().any(|path| {
+            outcome
+                .workspace
+                .local_worktree_path()
+                .is_some_and(|worktree_path| path == worktree_path)
+        }));
     }
 
     struct RepoFixture {

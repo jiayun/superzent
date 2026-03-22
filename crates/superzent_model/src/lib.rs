@@ -862,6 +862,42 @@ impl SuperzentStore {
         self.persist_and_notify(cx);
     }
 
+    pub fn sync_workspaces(
+        &mut self,
+        workspaces_to_upsert: Vec<WorkspaceEntry>,
+        removed_workspace_ids: Vec<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let removed_workspace_ids = removed_workspace_ids
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+
+        if !removed_workspace_ids.is_empty() {
+            self.state
+                .workspaces
+                .retain(|workspace| !removed_workspace_ids.contains(&workspace.id));
+            self.state
+                .sessions
+                .retain(|session| !removed_workspace_ids.contains(&session.workspace_id));
+        }
+
+        for workspace in workspaces_to_upsert {
+            if let Some(existing) = self
+                .state
+                .workspaces
+                .iter_mut()
+                .find(|existing| existing.id == workspace.id)
+            {
+                *existing = workspace;
+            } else {
+                self.state.workspaces.push(workspace);
+            }
+        }
+
+        self.normalize();
+        self.persist_and_notify(cx);
+    }
+
     pub fn record_workspace_opened(&mut self, workspace_id: &str, cx: &mut Context<Self>) {
         let now = Utc::now();
         let Some(workspace) = self

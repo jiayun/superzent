@@ -48,7 +48,7 @@ use smol::channel::Receiver as SmolReceiver;
 #[cfg(target_os = "macos")]
 use smol::channel::Sender as SmolSender;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -71,8 +71,8 @@ use terminal_view::{TerminalView, terminal_panel::TerminalPanel};
 #[cfg(feature = "acp_tabs")]
 use ui::ContextMenuEntry;
 use ui::{
-    ButtonLike, Chip, ContextMenu, DropdownMenu, DropdownStyle, Icon, Indicator, ListItem, Tab,
-    Tooltip, prelude::*,
+    ButtonLike, Chip, CommonAnimationExt, ContextMenu, DropdownMenu, DropdownStyle, Icon,
+    Indicator, ListItem, Tab, Tooltip, prelude::*,
 };
 use uuid::Uuid;
 use workspace::{
@@ -2120,6 +2120,7 @@ pub struct SuperzentSidebar {
     multi_workspace: WeakEntity<MultiWorkspace>,
     focus_handle: FocusHandle,
     width: Option<Pixels>,
+    deleting_workspace_ids: BTreeSet<String>,
     context_menu: Option<(Entity<ContextMenu>, Point<Pixels>, Subscription)>,
     rename_workspace_id: Option<String>,
     rename_editor: Option<Entity<Editor>>,
@@ -2164,6 +2165,7 @@ impl SuperzentSidebar {
             multi_workspace: weak_multi_workspace,
             focus_handle: cx.focus_handle(),
             width: None,
+            deleting_workspace_ids: BTreeSet::new(),
             context_menu: None,
             rename_workspace_id: None,
             rename_editor: None,
@@ -2289,6 +2291,27 @@ impl SuperzentSidebar {
                 cx,
             );
         });
+    }
+
+    fn mark_workspace_deleting(
+        &mut self,
+        workspace_id: &str,
+        is_deleting: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let changed = if is_deleting {
+            self.deleting_workspace_ids.insert(workspace_id.to_string())
+        } else {
+            self.deleting_workspace_ids.remove(workspace_id)
+        };
+
+        if changed {
+            cx.notify();
+        }
+    }
+
+    fn workspace_is_deleting(&self, workspace_id: &str) -> bool {
+        self.deleting_workspace_ids.contains(workspace_id)
     }
 
     fn current_workspace_entity(&self, cx: &App) -> Option<Entity<Workspace>> {
@@ -2484,6 +2507,20 @@ impl SuperzentSidebar {
     ) {
         let entity = cx.entity();
         let context_menu = ContextMenu::build(window, cx, move |menu, _, _| {
+            let mut menu = menu;
+
+            if matches!(&project.location, ProjectLocation::Local { .. }) {
+                menu = menu.entry("Sync Worktrees", None, {
+                    let entity = entity.clone();
+                    let project = project.clone();
+                    move |window, cx| {
+                        entity.update(cx, |this, cx| {
+                            this.sync_project_worktrees(project.clone(), window, cx);
+                        });
+                    }
+                });
+            }
+
             menu.entry("Close Project", None, {
                 let entity = entity.clone();
                 let project_id = project.id;
@@ -2524,6 +2561,18 @@ impl SuperzentSidebar {
             return;
         };
         run_close_project_from_store(current_workspace, project_id.to_string(), window, cx);
+    }
+
+    fn sync_project_worktrees(
+        &mut self,
+        project: ProjectEntry,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(current_workspace) = self.current_workspace_entity(cx) else {
+            return;
+        };
+        run_sync_project_worktrees_from_store(current_workspace, project, window, cx);
     }
 
     fn render_project_drop_zone(
@@ -2739,6 +2788,7 @@ impl SuperzentSidebar {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let selected = self.store.read(cx).active_workspace_id() == Some(workspace.id.as_str());
+        let is_deleting = self.workspace_is_deleting(&workspace.id);
         let attention_status = workspace.attention_status.clone();
         let workspace_for_open = workspace.clone();
         let workspace_for_delete = workspace.clone();
@@ -2765,6 +2815,7 @@ impl SuperzentSidebar {
                     .child(
                         ListItem::new(format!("workspace-{}", workspace.id))
                             .toggle_state(selected)
+                            .disabled(is_deleting)
                             .indent_level(1)
                             .spacing(ui::ListItemSpacing::Dense)
                             .rounded()
@@ -2782,7 +2833,21 @@ impl SuperzentSidebar {
                                         WorkspaceKind::Worktree => IconName::GitBranch,
                                     })),
                             )
-                            .when(workspace.managed, |this| {
+                            .when(workspace.managed && is_deleting, |this| {
+                                this.end_slot(
+                                    div()
+                                        .h_full()
+                                        .items_center()
+                                        .justify_center()
+                                        .child(
+                                            Icon::new(IconName::ArrowCircle)
+                                                .size(IconSize::Small)
+                                                .color(Color::Muted)
+                                                .with_rotate_animation(2),
+                                        ),
+                                )
+                            })
+                            .when(workspace.managed && !is_deleting, |this| {
                                 this.end_hover_slot(
                                     IconButton::new(
                                         format!("delete-{}", workspace.id),
@@ -2795,13 +2860,25 @@ impl SuperzentSidebar {
                                     })
                                     .on_click(cx.listener(
                                         move |this, _: &ClickEvent, window, cx| {
+                                            this.mark_workspace_deleting(
+                                                &workspace_for_delete.id,
+                                                true,
+                                                cx,
+                                            );
                                             if let Some(current_workspace) =
                                                 this.current_workspace_entity(cx)
                                             {
                                                 run_delete_workspace_from_store(
                                                     current_workspace,
                                                     workspace_for_delete.clone(),
+                                                    Some(cx.entity().downgrade()),
                                                     window,
+                                                    cx,
+                                                );
+                                            } else {
+                                                this.mark_workspace_deleting(
+                                                    &workspace_for_delete.id,
+                                                    false,
                                                     cx,
                                                 );
                                             }
@@ -4112,12 +4189,13 @@ fn run_delete_workspace(
         );
         return;
     };
-    run_delete_workspace_entry(workspace, workspace_entry, window, cx);
+    run_delete_workspace_entry(workspace, workspace_entry, None, window, cx);
 }
 
 fn run_delete_workspace_entry(
     workspace: &mut Workspace,
     workspace_entry: WorkspaceEntry,
+    deleting_sidebar: Option<WeakEntity<SuperzentSidebar>>,
     window: &mut gpui::Window,
     cx: &mut Context<Workspace>,
 ) {
@@ -4130,6 +4208,13 @@ fn run_delete_workspace_entry(
             ),
             cx,
         );
+        if let Some(sidebar) = deleting_sidebar.as_ref() {
+            sidebar
+                .update(cx, |sidebar, cx| {
+                    sidebar.mark_workspace_deleting(&workspace_entry.id, false, cx);
+                })
+                .ok();
+        }
         return;
     }
     let Some(project) = store.read(cx).project(&workspace_entry.project_id).cloned() else {
@@ -4140,10 +4225,20 @@ fn run_delete_workspace_entry(
             ),
             cx,
         );
+        if let Some(sidebar) = deleting_sidebar.as_ref() {
+            sidebar
+                .update(cx, |sidebar, cx| {
+                    sidebar.mark_workspace_deleting(&workspace_entry.id, false, cx);
+                })
+                .ok();
+        }
         return;
     };
-    let reopen_primary_in_current_window =
-        current_window_matches_workspace_entry(window, &workspace_entry, cx);
+    let fallback_workspace = store
+        .read(cx)
+        .primary_workspace_for_project(&project.id)
+        .filter(|fallback_workspace| fallback_workspace.id != workspace_entry.id)
+        .cloned();
 
     let prompt = window.prompt(
         PromptLevel::Warning,
@@ -4160,48 +4255,71 @@ fn run_delete_workspace_entry(
 
     cx.spawn_in(window, async move |this, cx| {
         if prompt.await != Ok(1) {
+            if let Some(sidebar) = deleting_sidebar.as_ref() {
+                sidebar
+                    .update(cx, |sidebar, cx| {
+                        sidebar.mark_workspace_deleting(&workspace_entry.id, false, cx);
+                    })
+                    .ok();
+            }
             return anyhow::Ok(());
         }
 
-        let workspace_to_delete = workspace_entry.clone();
-        let delete_result = match &project.location {
-            ProjectLocation::Local { repo_root } => {
-                cx.background_spawn({
-                    let repo_root = repo_root.clone();
-                    async move {
-                        superzent_git::delete_workspace(&workspace_to_delete, &repo_root, false)
-                    }
-                })
-                .await
-            }
-            ProjectLocation::Ssh { .. } => {
-                let (project_workspace, _) = resolve_remote_project_workspace(
-                    &project,
-                    &store,
-                    app_state.clone(),
-                    false,
-                    cx,
-                )
-                .await?;
+        let delete_result: anyhow::Result<()> = async {
+            let workspace_to_delete = workspace_entry.clone();
+            match &project.location {
+                ProjectLocation::Local { repo_root } => {
+                    cx.background_spawn({
+                        let repo_root = repo_root.clone();
+                        async move {
+                            superzent_git::delete_workspace(
+                                &workspace_to_delete,
+                                &repo_root,
+                                false,
+                            )
+                        }
+                    })
+                    .await?;
+                }
+                ProjectLocation::Ssh { .. } => {
+                    let (project_workspace, _) = resolve_remote_project_workspace(
+                        &project,
+                        &store,
+                        app_state.clone(),
+                        false,
+                        cx,
+                    )
+                    .await?;
 
-                let repository = cx.update(|_, cx| {
-                    active_repository_for_workspace(&project_workspace, cx)
-                        .ok_or_else(|| anyhow::anyhow!("no active repository found"))
-                })??;
-                let target_path = PathBuf::from(
-                    workspace_to_delete
-                        .ssh_worktree_path()
-                        .ok_or_else(|| anyhow::anyhow!("missing remote worktree path"))?,
-                );
-                let receiver = repository.update(cx, |repository, _| {
-                    repository.remove_worktree(target_path, false)
-                });
-                receiver.await??;
-                Ok(())
+                    let repository = cx.update(|_, cx| {
+                        active_repository_for_workspace(&project_workspace, cx)
+                            .ok_or_else(|| anyhow::anyhow!("no active repository found"))
+                    })??;
+                    let target_path = PathBuf::from(
+                        workspace_to_delete
+                            .ssh_worktree_path()
+                            .ok_or_else(|| anyhow::anyhow!("missing remote worktree path"))?,
+                    );
+                    let receiver = repository.update(cx, |repository, _| {
+                        repository.remove_worktree(target_path, false)
+                    });
+                    receiver.await??;
+                }
             }
-        };
 
-        this.update_in(cx, |workspace, window, cx| match delete_result {
+            close_workspace_in_all_windows(
+                workspace_entry.clone(),
+                fallback_workspace.clone(),
+                app_state.clone(),
+                cx,
+            )
+            .await?;
+
+            Ok(())
+        }
+        .await;
+
+        this.update_in(cx, |workspace, _window, cx| match delete_result {
             Ok(()) => {
                 store.update(cx, |store, cx| {
                     store.remove_workspace(&workspace_entry.id, cx);
@@ -4213,24 +4331,6 @@ fn run_delete_workspace_entry(
                     ),
                     cx,
                 );
-                if reopen_primary_in_current_window {
-                    if let Some(primary_workspace) = store
-                        .read(cx)
-                        .primary_workspace_for_project(&project.id)
-                        .cloned()
-                    {
-                        store.update(cx, |store, cx| {
-                            store.record_workspace_opened(&primary_workspace.id, cx);
-                        });
-                        focus_existing_or_open_workspace_entry(
-                            primary_workspace,
-                            workspace.app_state().clone(),
-                            window,
-                            cx,
-                        )
-                        .detach_and_log_err(cx);
-                    }
-                }
             }
             Err(error) => {
                 workspace.show_toast(
@@ -4243,6 +4343,158 @@ fn run_delete_workspace_entry(
             }
         })
         .ok();
+
+        if let Some(sidebar) = deleting_sidebar.as_ref() {
+            sidebar
+                .update(cx, |sidebar, cx| {
+                    sidebar.mark_workspace_deleting(&workspace_entry.id, false, cx);
+                })
+                .ok();
+        }
+
+        anyhow::Ok(())
+    })
+    .detach_and_log_err(cx);
+}
+
+fn run_sync_project_worktrees(
+    workspace: &mut Workspace,
+    project: ProjectEntry,
+    window: &mut gpui::Window,
+    cx: &mut Context<Workspace>,
+) {
+    let ProjectLocation::Local { repo_root } = &project.location else {
+        workspace.show_toast(
+            Toast::new(
+                NotificationId::unique::<SuperzentSidebar>(),
+                "Worktree sync is only available for local projects.",
+            ),
+            cx,
+        );
+        return;
+    };
+
+    let store = SuperzentStore::global(cx);
+    let repo_root = repo_root.clone();
+    let app_state = workspace.app_state().clone();
+
+    workspace.show_toast(
+        Toast::new(
+            NotificationId::unique::<SuperzentSidebar>(),
+            format!("Syncing worktrees for {}...", project.name),
+        ),
+        cx,
+    );
+
+    cx.spawn_in(window, async move |this, cx| {
+        let sync_result: anyhow::Result<()> = async {
+            let discovered_worktrees = cx
+                .background_spawn(async move { superzent_git::discover_worktrees(&repo_root) })
+                .await?;
+
+            let (
+                workspaces_to_upsert,
+                removed_workspaces,
+                fallback_workspace,
+                existing_workspace_ids,
+            ) = cx.update(|_, cx| {
+                let store = store.read(cx);
+                let existing_workspaces = store
+                    .workspaces_for_project(&project.id)
+                    .into_iter()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                let existing_workspace_ids = existing_workspaces
+                    .iter()
+                    .map(|workspace| workspace.id.clone())
+                    .collect::<BTreeSet<_>>();
+                let discovered_paths = discovered_worktrees
+                    .iter()
+                    .map(|worktree| worktree.path.clone())
+                    .collect::<BTreeSet<_>>();
+                let workspaces_to_upsert = discovered_worktrees
+                    .iter()
+                    .filter_map(|worktree| {
+                        build_synced_local_workspace_entry(&project, worktree, &store)
+                    })
+                    .collect::<Vec<_>>();
+                let fallback_workspace = workspaces_to_upsert
+                    .iter()
+                    .find(|workspace| workspace.is_primary())
+                    .cloned()
+                    .or_else(|| store.primary_workspace_for_project(&project.id).cloned());
+                let removed_workspaces = existing_workspaces
+                    .into_iter()
+                    .filter(|workspace| workspace.managed && !workspace.is_primary())
+                    .filter(|workspace| {
+                        workspace
+                            .local_worktree_path()
+                            .is_some_and(|worktree_path| !discovered_paths.contains(worktree_path))
+                    })
+                    .collect::<Vec<_>>();
+
+                (
+                    workspaces_to_upsert,
+                    removed_workspaces,
+                    fallback_workspace,
+                    existing_workspace_ids,
+                )
+            })?;
+
+            for removed_workspace in &removed_workspaces {
+                close_workspace_in_all_windows(
+                    removed_workspace.clone(),
+                    fallback_workspace.clone(),
+                    app_state.clone(),
+                    cx,
+                )
+                .await?;
+            }
+
+            let removed_workspace_ids = removed_workspaces
+                .iter()
+                .map(|workspace| workspace.id.clone())
+                .collect::<Vec<_>>();
+            let added_count = workspaces_to_upsert
+                .iter()
+                .filter(|workspace| !existing_workspace_ids.contains(&workspace.id))
+                .count();
+            let refreshed_count = workspaces_to_upsert.len().saturating_sub(added_count);
+            let removed_count = removed_workspace_ids.len();
+
+            this.update_in(cx, |workspace, _window, cx| {
+                store.update(cx, |store, cx| {
+                    store.sync_workspaces(
+                        workspaces_to_upsert.clone(),
+                        removed_workspace_ids.clone(),
+                        cx,
+                    );
+                });
+                workspace.show_toast(
+                    Toast::new(
+                        NotificationId::unique::<SuperzentSidebar>(),
+                        project_worktree_sync_message(&project.name, added_count, removed_count, refreshed_count),
+                    ),
+                    cx,
+                );
+            })?;
+
+            Ok(())
+        }
+        .await;
+
+        if let Err(error) = sync_result {
+            this.update_in(cx, |workspace, _window, cx| {
+                workspace.show_toast(
+                    Toast::new(
+                        NotificationId::unique::<SuperzentSidebar>(),
+                        format!("Failed to sync worktrees: {error}"),
+                    ),
+                    cx,
+                );
+            })
+            .ok();
+        }
 
         anyhow::Ok(())
     })
@@ -4404,6 +4656,70 @@ async fn close_project_in_all_windows(
     Ok(())
 }
 
+async fn close_workspace_in_all_windows(
+    workspace_entry: WorkspaceEntry,
+    fallback_workspace: Option<WorkspaceEntry>,
+    app_state: Arc<WorkspaceAppState>,
+    cx: &mut gpui::AsyncApp,
+) -> anyhow::Result<()> {
+    let Some(serialized_location) = serialized_workspace_location_for_workspace(
+        &workspace_entry,
+    ) else {
+        return Ok(());
+    };
+    let workspace_windows = cx.update(|cx| workspace_windows_for_location(&serialized_location, cx));
+
+    for workspace_window in workspace_windows {
+        let matching_indexes = match workspace_window.update(cx, |multi_workspace, _, cx| {
+            matching_workspace_indexes(multi_workspace, std::slice::from_ref(&workspace_entry), cx)
+        }) {
+            Ok(matching_indexes) => matching_indexes,
+            Err(_) => continue,
+        };
+
+        if matching_indexes.is_empty() {
+            continue;
+        }
+
+        let workspace_count = match workspace_window.update(cx, |multi_workspace, _, _| {
+            multi_workspace.workspaces().len()
+        }) {
+            Ok(workspace_count) => workspace_count,
+            Err(_) => continue,
+        };
+
+        if matching_indexes.len() == workspace_count {
+            ensure_project_close_fallback(
+                workspace_window,
+                fallback_workspace.clone(),
+                app_state.clone(),
+                cx,
+            )
+            .await?;
+        }
+
+        let matching_indexes = match workspace_window.update(cx, |multi_workspace, _, cx| {
+            matching_workspace_indexes(multi_workspace, std::slice::from_ref(&workspace_entry), cx)
+        }) {
+            Ok(matching_indexes) => matching_indexes,
+            Err(_) => continue,
+        };
+
+        for index in matching_indexes.into_iter().rev() {
+            if workspace_window
+                .update(cx, |multi_workspace, window, cx| {
+                    multi_workspace.remove_workspace(index, window, cx);
+                })
+                .is_err()
+            {
+                break;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 async fn ensure_project_close_fallback(
     workspace_window: WindowHandle<MultiWorkspace>,
     fallback_workspace: Option<WorkspaceEntry>,
@@ -4510,11 +4826,29 @@ fn show_project_close_toast(
 fn run_delete_workspace_from_store(
     workspace_handle: Entity<Workspace>,
     workspace_entry: WorkspaceEntry,
+    deleting_sidebar: Option<WeakEntity<SuperzentSidebar>>,
     window: &mut gpui::Window,
     cx: &mut App,
 ) {
     workspace_handle.update(cx, |workspace, cx| {
-        run_delete_workspace_entry(workspace, workspace_entry.clone(), window, cx);
+        run_delete_workspace_entry(
+            workspace,
+            workspace_entry.clone(),
+            deleting_sidebar.clone(),
+            window,
+            cx,
+        );
+    });
+}
+
+fn run_sync_project_worktrees_from_store(
+    workspace_handle: Entity<Workspace>,
+    project: ProjectEntry,
+    window: &mut gpui::Window,
+    cx: &mut App,
+) {
+    workspace_handle.update(cx, |workspace, cx| {
+        run_sync_project_worktrees(workspace, project.clone(), window, cx);
     });
 }
 
@@ -4638,38 +4972,6 @@ fn open_workspace_entry(
     }
 }
 
-fn focus_existing_or_open_workspace_entry(
-    workspace_entry: WorkspaceEntry,
-    app_state: Arc<WorkspaceAppState>,
-    window: &mut gpui::Window,
-    cx: &mut App,
-) -> Task<anyhow::Result<()>> {
-    if let Some(target_window) = notification_window_for_workspace_entry(&workspace_entry, cx) {
-        return cx.spawn({
-            let workspace_entry = workspace_entry.clone();
-            async move |cx| {
-                target_window.update(cx, |multi_workspace, window, cx| {
-                    let Some(live_workspace) = multi_workspace
-                        .workspaces()
-                        .iter()
-                        .find(|workspace| workspace_matches_entry(workspace, &workspace_entry, cx))
-                        .cloned()
-                    else {
-                        anyhow::bail!("failed to locate open workspace");
-                    };
-
-                    window.activate_window();
-                    multi_workspace.activate(live_workspace, cx);
-                    Ok(())
-                })??;
-                Ok(())
-            }
-        });
-    }
-
-    open_workspace_entry(workspace_entry, app_state, window, cx)
-}
-
 fn workspace_from_window(window: &gpui::Window, cx: &App) -> Option<Entity<Workspace>> {
     let multi_workspace = window.window_handle().downcast::<MultiWorkspace>()?;
     let multi_workspace = multi_workspace.read(cx).ok()?;
@@ -4786,16 +5088,6 @@ fn workspace_for_project_in_any_window(
         })
 }
 
-fn current_window_matches_workspace_entry(
-    window: &Window,
-    workspace_entry: &WorkspaceEntry,
-    cx: &App,
-) -> bool {
-    workspace_from_window(window, cx)
-        .as_ref()
-        .is_some_and(|workspace| workspace_matches_entry(workspace, workspace_entry, cx))
-}
-
 fn ordered_multi_workspace_windows(cx: &App) -> Vec<WindowHandle<MultiWorkspace>> {
     cx.window_stack()
         .unwrap_or_else(|| cx.windows())
@@ -4862,6 +5154,18 @@ fn serialized_workspace_location_for_project(
     match project_location {
         ProjectLocation::Local { .. } => Some(SerializedWorkspaceLocation::Local),
         ProjectLocation::Ssh { connection, .. } => {
+            let remote_connection = remote_connection_options_from_stored(connection)?;
+            Some(SerializedWorkspaceLocation::Remote(remote_connection))
+        }
+    }
+}
+
+fn serialized_workspace_location_for_workspace(
+    workspace_entry: &WorkspaceEntry,
+) -> Option<SerializedWorkspaceLocation> {
+    match &workspace_entry.location {
+        WorkspaceLocation::Local { .. } => Some(SerializedWorkspaceLocation::Local),
+        WorkspaceLocation::Ssh { connection, .. } => {
             let remote_connection = remote_connection_options_from_stored(connection)?;
             Some(SerializedWorkspaceLocation::Remote(remote_connection))
         }
@@ -4976,6 +5280,115 @@ fn local_path_basename(path: &Path) -> String {
         .and_then(|name| name.to_str())
         .unwrap_or("Project")
         .to_string()
+}
+
+fn build_synced_local_workspace_entry(
+    project: &ProjectEntry,
+    discovered_worktree: &superzent_git::DiscoveredWorktree,
+    store: &SuperzentStore,
+) -> Option<WorkspaceEntry> {
+    let repo_root = project.local_repo_root()?;
+    let workspace_location = WorkspaceLocation::Local {
+        worktree_path: discovered_worktree.path.clone(),
+    };
+    let existing_workspace = store.workspace_for_location(&workspace_location).cloned();
+    let now = Utc::now();
+    let kind = if discovered_worktree.path == repo_root {
+        WorkspaceKind::Primary
+    } else {
+        WorkspaceKind::Worktree
+    };
+
+    Some(WorkspaceEntry {
+        id: existing_workspace
+            .as_ref()
+            .map(|workspace| workspace.id.clone())
+            .unwrap_or_else(|| Uuid::new_v4().to_string()),
+        project_id: project.id.clone(),
+        kind: kind.clone(),
+        name: existing_workspace
+            .as_ref()
+            .map(|workspace| workspace.name.clone())
+            .unwrap_or_else(|| match kind {
+                WorkspaceKind::Primary => local_path_basename(&discovered_worktree.path),
+                WorkspaceKind::Worktree => {
+                    if discovered_worktree.git_status == WorkspaceGitStatus::Available {
+                        discovered_worktree.branch.clone()
+                    } else {
+                        local_path_basename(&discovered_worktree.path)
+                    }
+                }
+            }),
+        display_name: existing_workspace
+            .as_ref()
+            .and_then(|workspace| workspace.display_name.clone()),
+        branch: discovered_worktree.branch.clone(),
+        location: workspace_location,
+        agent_preset_id: existing_workspace
+            .as_ref()
+            .map(|workspace| workspace.agent_preset_id.clone())
+            .unwrap_or_else(|| store.default_preset().id.clone()),
+        managed: if kind == WorkspaceKind::Primary {
+            false
+        } else {
+            existing_workspace
+                .as_ref()
+                .map(|workspace| workspace.managed)
+                .unwrap_or(true)
+        },
+        git_status: discovered_worktree.git_status.clone(),
+        git_summary: if discovered_worktree.git_status == WorkspaceGitStatus::Available {
+            discovered_worktree.git_summary.clone().or_else(|| {
+                existing_workspace
+                    .as_ref()
+                    .and_then(|workspace| workspace.git_summary.clone())
+            })
+        } else {
+            None
+        },
+        attention_status: existing_workspace
+            .as_ref()
+            .map(|workspace| workspace.attention_status.clone())
+            .unwrap_or(WorkspaceAttentionStatus::Idle),
+        review_pending: existing_workspace
+            .as_ref()
+            .is_some_and(|workspace| workspace.review_pending),
+        last_attention_reason: existing_workspace
+            .as_ref()
+            .and_then(|workspace| workspace.last_attention_reason.clone()),
+        created_at: existing_workspace
+            .as_ref()
+            .map(|workspace| workspace.created_at)
+            .unwrap_or(now),
+        last_opened_at: existing_workspace
+            .as_ref()
+            .map(|workspace| workspace.last_opened_at)
+            .unwrap_or(now),
+    })
+}
+
+fn project_worktree_sync_message(
+    project_name: &str,
+    added_count: usize,
+    removed_count: usize,
+    refreshed_count: usize,
+) -> String {
+    if added_count == 0 && removed_count == 0 {
+        return format!("Worktrees already in sync for {project_name}.");
+    }
+
+    let mut changes = Vec::new();
+    if added_count > 0 {
+        changes.push(format!("{added_count} added"));
+    }
+    if removed_count > 0 {
+        changes.push(format!("{removed_count} removed"));
+    }
+    if refreshed_count > 0 {
+        changes.push(format!("{refreshed_count} refreshed"));
+    }
+
+    format!("Synced worktrees for {project_name}: {}.", changes.join(", "))
 }
 
 fn build_local_workspace_bundle(
