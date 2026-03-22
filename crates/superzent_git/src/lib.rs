@@ -883,6 +883,8 @@ mod tests {
             repo.repo_path.parent().unwrap(),
             &[
                 "clone",
+                "--branch",
+                "main",
                 remote_path.to_str().unwrap(),
                 other_clone_path.to_str().unwrap(),
             ],
@@ -967,8 +969,9 @@ mod tests {
 
         if !output.status.success() {
             panic!(
-                "git {} failed: {}",
+                "git {} failed\nstdout: {}\nstderr: {}",
                 args.join(" "),
+                String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr)
             );
         }
