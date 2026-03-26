@@ -2239,16 +2239,17 @@ impl SuperzentSidebar {
             store_workspace_id_for_live_workspace(&current_workspace, &store, cx)
         };
         self.store.update(cx, |store, cx| {
-            if let Some(workspace_id) = existing_workspace_id.clone() {
+            if let Some(workspace_id) = existing_workspace_id.as_deref() {
                 store.record_workspace_opened(&workspace_id, cx);
                 return;
             }
 
             let workspace_bundle = build_local_workspace_bundle(&current_workspace, store, cx)
                 .or_else(|| build_remote_workspace_bundle(&current_workspace, store, cx));
-            if let Some((project_entry, workspace_entry)) = workspace_bundle.clone() {
-                store.upsert_project_bundle(project_entry, workspace_entry.clone(), cx);
-                store.record_workspace_opened(&workspace_entry.id, cx);
+            if let Some((project_entry, workspace_entry)) = workspace_bundle {
+                let workspace_id = workspace_entry.id.clone();
+                store.upsert_project_bundle(project_entry, workspace_entry, cx);
+                store.record_workspace_opened(&workspace_id, cx);
                 return;
             }
 
@@ -2683,10 +2684,10 @@ impl SuperzentSidebar {
 
             menu = menu.entry("Close Workspace", Some(Box::new(CloseWorkspace)), {
                 let entity = entity.clone();
-                let workspace = workspace.clone();
                 move |window, cx| {
+                    let workspace = workspace.clone();
                     entity.update(cx, |this, cx| {
-                        this.close_workspace(workspace.clone(), window, cx);
+                        this.close_workspace(workspace, window, cx);
                     });
                 }
             });
