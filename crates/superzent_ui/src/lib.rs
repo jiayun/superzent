@@ -94,6 +94,7 @@ actions!(
         NewWorkspace,
         RevealChanges,
         OpenWorkspaceInNewWindow,
+        CloseWorkspace,
         DeleteWorkspace,
         CollapseWorkspaceSection,
         ExpandWorkspaceSection
@@ -677,6 +678,9 @@ pub fn init(cx: &mut App) {
                 })
                 .register_action(|workspace, _: &OpenWorkspaceInNewWindow, window, cx| {
                     run_open_workspace_in_new_window(workspace, window, cx);
+                })
+                .register_action(|workspace, _: &CloseWorkspace, window, cx| {
+                    run_close_workspace(workspace, window, cx);
                 })
                 .register_action(|workspace, _: &DeleteWorkspace, window, cx| {
                     run_delete_workspace(workspace, window, cx);
@@ -2230,12 +2234,18 @@ impl SuperzentSidebar {
         let Some(current_workspace) = self.current_workspace_entity(cx) else {
             return;
         };
-        let workspace_bundle = {
+        let existing_workspace_id = {
             let store = self.store.read(cx);
-            build_local_workspace_bundle(&current_workspace, &store, cx)
-                .or_else(|| build_remote_workspace_bundle(&current_workspace, &store, cx))
+            store_workspace_id_for_live_workspace(&current_workspace, &store, cx)
         };
         self.store.update(cx, |store, cx| {
+            if let Some(workspace_id) = existing_workspace_id.clone() {
+                store.record_workspace_opened(&workspace_id, cx);
+                return;
+            }
+
+            let workspace_bundle = build_local_workspace_bundle(&current_workspace, store, cx)
+                .or_else(|| build_remote_workspace_bundle(&current_workspace, store, cx));
             if let Some((project_entry, workspace_entry)) = workspace_bundle.clone() {
                 store.upsert_project_bundle(project_entry, workspace_entry.clone(), cx);
                 store.record_workspace_opened(&workspace_entry.id, cx);
@@ -2660,16 +2670,28 @@ impl SuperzentSidebar {
         cx: &mut Context<Self>,
     ) {
         let entity = cx.entity();
-        let context_menu = ContextMenu::build(window, cx, move |menu, _, _| {
-            menu.entry("Rename Workspace", None, {
+        let context_menu = ContextMenu::build(window, cx, move |menu, _window, _cx| {
+            let mut menu = menu.entry("Rename Workspace", None, {
                 let entity = entity.clone();
-                let workspace_id = workspace.id;
+                let workspace_id = workspace.id.clone();
                 move |window, cx| {
                     entity.update(cx, |this, cx| {
                         this.begin_workspace_rename(&workspace_id, window, cx);
                     });
                 }
-            })
+            });
+
+            menu = menu.entry("Close Workspace", Some(Box::new(CloseWorkspace)), {
+                let entity = entity.clone();
+                let workspace = workspace.clone();
+                move |window, cx| {
+                    entity.update(cx, |this, cx| {
+                        this.close_workspace(workspace.clone(), window, cx);
+                    });
+                }
+            });
+
+            menu
         });
 
         window.focus(&context_menu.focus_handle(cx), cx);
@@ -2701,6 +2723,46 @@ impl SuperzentSidebar {
             return;
         };
         run_close_project_from_store(current_workspace, project_id.to_string(), window, cx);
+    }
+
+    fn close_workspace(
+        &mut self,
+        workspace_entry: WorkspaceEntry,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(multi_workspace) = self.multi_workspace.upgrade() else {
+            return;
+        };
+
+        let Some(index) = multi_workspace
+            .read(cx)
+            .workspaces()
+            .iter()
+            .enumerate()
+            .find_map(|(index, workspace)| {
+                workspace_matches_entry(workspace, &workspace_entry, cx).then_some(index)
+            })
+            .or_else(|| {
+                (self.store.read(cx).active_workspace_id() == Some(workspace_entry.id.as_str()))
+                    .then(|| multi_workspace.read(cx).active_workspace_index())
+            })
+        else {
+            if let Some(current_workspace) = self.current_workspace_entity(cx) {
+                show_workspace_toast(
+                    &current_workspace,
+                    "Workspace is not open in this window.",
+                    cx,
+                );
+            }
+            return;
+        };
+
+        multi_workspace.update(cx, |multi_workspace, cx| {
+            multi_workspace
+                .close_workspace_at_index(index, window, cx)
+                .detach_and_log_err(cx);
+        });
     }
 
     fn sync_project_worktrees(
@@ -4366,6 +4428,33 @@ fn run_delete_workspace(
     run_delete_workspace_entry(workspace, workspace_entry, None, window, cx);
 }
 
+fn run_close_workspace(
+    _workspace: &mut Workspace,
+    window: &mut gpui::Window,
+    cx: &mut Context<Workspace>,
+) {
+    let current_workspace = cx.entity();
+    let Some(multi_workspace) = window.window_handle().downcast::<MultiWorkspace>() else {
+        return;
+    };
+
+    if let Err(error) = multi_workspace.update(cx, |multi_workspace, window, cx| {
+        let Some(index) = multi_workspace
+            .workspaces()
+            .iter()
+            .position(|workspace| *workspace == current_workspace)
+        else {
+            return;
+        };
+
+        multi_workspace
+            .close_workspace_at_index(index, window, cx)
+            .detach_and_log_err(cx);
+    }) {
+        log::error!("failed to close workspace in current window: {error:#}");
+    }
+}
+
 fn run_delete_workspace_entry(
     workspace: &mut Workspace,
     workspace_entry: WorkspaceEntry,
@@ -5192,6 +5281,17 @@ fn workspace_matches_entry(
     workspace_location_snapshot(workspace, cx).is_some_and(|location| {
         workspace_entry.matches_locator(&workspace_location_to_locator(&location))
     })
+}
+
+fn store_workspace_id_for_live_workspace(
+    workspace: &Entity<Workspace>,
+    store: &SuperzentStore,
+    cx: &App,
+) -> Option<String> {
+    workspace_location_snapshot(workspace, cx)
+        .as_ref()
+        .and_then(|location| store.workspace_for_location(location))
+        .map(|workspace_entry| workspace_entry.id.clone())
 }
 
 fn workspace_for_entry_in_window(

@@ -560,6 +560,8 @@ pub enum CloseIntent {
     Quit,
     /// Close a window.
     CloseWindow,
+    /// Close a workspace within the current window.
+    CloseWorkspace,
     /// Replace the workspace in an existing window.
     ReplaceWindow,
 }
@@ -2890,7 +2892,7 @@ impl Workspace {
                         .count()
                 })?;
 
-                close_intent != CloseIntent::ReplaceWindow && remaining_workspaces == 0
+                close_intent == CloseIntent::CloseWindow && remaining_workspaces == 0
             };
 
             if let Some(active_call) = active_call
@@ -2919,7 +2921,10 @@ impl Workspace {
                         }
                     }
                 }
-                if close_intent == CloseIntent::ReplaceWindow {
+                if matches!(
+                    close_intent,
+                    CloseIntent::ReplaceWindow | CloseIntent::CloseWorkspace
+                ) {
                     _ = cx.update(|_window, cx| {
                         let multi_workspace = cx
                             .windows()
@@ -10252,6 +10257,40 @@ mod tests {
     }
 
     #[gpui::test]
+    async fn test_close_workspace(cx: &mut TestAppContext) {
+        init_test(cx);
+
+        let fs = FakeFs::new(cx.executor());
+        fs.insert_tree("/root", json!({ "one": "" })).await;
+
+        let project = Project::test(fs, ["root".as_ref()], cx).await;
+        let (workspace, cx) =
+            cx.add_window_view(|window, cx| Workspace::test_new(project.clone(), window, cx));
+
+        let clean_item = cx.new(TestItem::new);
+        workspace.update_in(cx, |w, window, cx| {
+            w.add_item_to_active_pane(Box::new(clean_item.clone()), None, true, window, cx)
+        });
+        let clean_task = workspace.update_in(cx, |w, window, cx| {
+            w.prepare_to_close(CloseIntent::CloseWorkspace, window, cx)
+        });
+        assert!(clean_task.await.unwrap());
+
+        let dirty_item = cx.new(|cx| TestItem::new(cx).with_dirty(true));
+        workspace.update_in(cx, |w, window, cx| {
+            w.add_item_to_active_pane(Box::new(dirty_item.clone()), None, true, window, cx);
+        });
+        let dirty_task = workspace.update_in(cx, |w, window, cx| {
+            w.prepare_to_close(CloseIntent::CloseWorkspace, window, cx)
+        });
+        cx.executor().run_until_parked();
+        cx.simulate_prompt_answer("Cancel");
+        cx.executor().run_until_parked();
+        assert!(!cx.has_pending_prompt());
+        assert!(!dirty_task.await.unwrap());
+    }
+
+    #[gpui::test]
     async fn test_multi_workspace_close_window_multiple_workspaces_cancel(cx: &mut TestAppContext) {
         init_test(cx);
 
@@ -10330,6 +10369,38 @@ mod tests {
             multi_workspace_handle.update(cx, |_, _, _| ()).is_ok(),
             "window should still exist after cancelling one workspace's close"
         );
+    }
+
+    #[gpui::test]
+    async fn test_multi_workspace_close_workspace_replaces_last_workspace(cx: &mut TestAppContext) {
+        init_test(cx);
+
+        let fs = FakeFs::new(cx.executor());
+        fs.insert_tree("/root", json!({ "one": "" })).await;
+
+        let project = Project::test(fs, ["root".as_ref()], cx).await;
+        let multi_workspace_handle =
+            cx.add_window(|window, cx| MultiWorkspace::test_new(project, window, cx));
+        cx.run_until_parked();
+
+        let original_workspace = multi_workspace_handle
+            .read_with(cx, |mw, _| mw.workspace().clone())
+            .unwrap();
+        let cx = &mut VisualTestContext::from_window(multi_workspace_handle.into(), cx);
+
+        let close_task = multi_workspace_handle
+            .update(cx, |mw, window, cx| {
+                mw.close_workspace_at_index(0, window, cx)
+            })
+            .unwrap();
+        close_task.await.unwrap();
+
+        multi_workspace_handle
+            .read_with(cx, |mw, _| {
+                assert_eq!(mw.workspaces().len(), 1);
+                assert_ne!(mw.workspace().entity_id(), original_workspace.entity_id());
+            })
+            .unwrap();
     }
 
     #[gpui::test]

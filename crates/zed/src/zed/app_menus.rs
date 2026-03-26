@@ -134,7 +134,7 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
                         close_pinned: true,
                     },
                 ),
-                MenuItem::action("Close Workspace", workspace::CloseProject),
+                MenuItem::action("Close Workspace", superzent_ui::CloseWorkspace),
                 MenuItem::action("Close Window", workspace::CloseWindow),
             ],
         },

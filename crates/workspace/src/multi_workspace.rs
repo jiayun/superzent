@@ -325,6 +325,64 @@ impl MultiWorkspace {
         .detach_and_log_err(cx);
     }
 
+    pub fn close_workspace_at_index(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Task<Result<()>> {
+        let Some(workspace) = self.workspaces.get(index).cloned() else {
+            return Task::ready(Ok(()));
+        };
+        let workspace_id = workspace.entity_id();
+        let app_state = workspace.read(cx).app_state().clone();
+        let Some(window_handle) = window.window_handle().downcast::<MultiWorkspace>() else {
+            return Task::ready(Ok(()));
+        };
+
+        cx.spawn_in(window, async move |this, cx| {
+            let should_continue = workspace
+                .update_in(cx, |workspace, window, cx| {
+                    workspace.prepare_to_close(CloseIntent::CloseWorkspace, window, cx)
+                })?
+                .await?;
+            if !should_continue {
+                return anyhow::Ok(());
+            }
+
+            let needs_replacement = this.update(cx, |multi_workspace, _cx| {
+                multi_workspace.workspaces.len() == 1
+            })?;
+            if needs_replacement {
+                let _ = cx
+                    .update(|_window, cx| {
+                        Workspace::new_local(
+                            vec![],
+                            app_state.clone(),
+                            Some(window_handle),
+                            None,
+                            None,
+                            true,
+                            cx,
+                        )
+                    })?
+                    .await?;
+            }
+
+            this.update_in(cx, |multi_workspace, window, cx| {
+                if let Some(index) = multi_workspace
+                    .workspaces
+                    .iter()
+                    .position(|candidate| candidate.entity_id() == workspace_id)
+                {
+                    multi_workspace.remove_workspace(index, window, cx);
+                }
+            })?;
+
+            anyhow::Ok(())
+        })
+    }
+
     fn subscribe_to_workspace(workspace: &Entity<Workspace>, cx: &mut Context<Self>) {
         cx.subscribe(workspace, |this, workspace, event, cx| {
             if let WorkspaceEvent::Activate = event {
