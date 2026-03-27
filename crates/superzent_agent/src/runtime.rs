@@ -431,7 +431,8 @@ CURL_OUTPUT=$(curl -fsSG "$SUPERZENT_AGENT_HOOK_URL" \
   --data-urlencode "cwd=$PWD" \
   --data-urlencode "version=$SUPERZENT_HOOK_VERSION" \
   2>&1)
-[ -n "${_SUPERZENT_DEBUG_LOG:-}" ] && echo "$(date '+%H:%M:%S') curl exit=$? output=$CURL_OUTPUT" >> "$_SUPERZENT_DEBUG_LOG"
+CURL_STATUS=$?
+[ -n "${_SUPERZENT_DEBUG_LOG:-}" ] && echo "$(date '+%H:%M:%S') curl exit=$CURL_STATUS output=$CURL_OUTPUT" >> "$_SUPERZENT_DEBUG_LOG"
 
 exit 0
 "#
