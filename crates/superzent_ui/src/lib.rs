@@ -14,7 +14,6 @@ use chrono::Utc;
 #[cfg(target_os = "macos")]
 use cocoa::{
     base::{id, nil},
-    foundation::{NSAutoreleasePool, NSString},
 };
 use editor::{Editor, EditorEvent, actions::SelectAll};
 use git::repository::validate_worktree_directory;
@@ -522,7 +521,7 @@ impl WorkspaceAttentionController {
         cx: &mut Context<Self>,
     ) {
         let mode = TerminalSettings::get_global(cx).agent_notifications;
-        if !should_show_native_notification(mode, workspace_id, &self.store, cx) {
+        if !should_show_terminal_notification(mode, workspace_id, &self.store, cx) {
             return;
         }
 
@@ -536,14 +535,14 @@ impl WorkspaceAttentionController {
         workspace_id: &str,
         workspace_name: &str,
         cx: &mut Context<Self>,
-    ) -> bool {
+    ) {
         self.dismiss_notifications(cx);
 
         let Some(screen) = cx
             .primary_display()
             .or_else(|| cx.displays().into_iter().next())
         else {
-            return false;
+            return;
         };
 
         let title = SharedString::from(notification.title());
@@ -568,7 +567,7 @@ impl WorkspaceAttentionController {
             Ok(screen_window) => screen_window,
             Err(error) => {
                 log::error!("failed to open terminal agent notification window: {error:#}");
-                return false;
+                return;
             }
         };
 
@@ -579,7 +578,7 @@ impl WorkspaceAttentionController {
                 let _ = screen_window.update(cx, |_, window, _| {
                     window.remove_window();
                 });
-                return false;
+                return;
             }
         };
 
@@ -596,19 +595,23 @@ impl WorkspaceAttentionController {
                 }),
             );
         self.notifications.push(screen_window);
-
-        true
     }
 
     #[cfg(not(feature = "acp_tabs"))]
     fn show_popup_notification(
         &mut self,
-        _notification: TerminalLifecycleNotification,
-        _workspace_id: &str,
+        notification: TerminalLifecycleNotification,
+        workspace_id: &str,
         _workspace_name: &str,
         _cx: &mut Context<Self>,
-    ) -> bool {
-        false
+    ) {
+        static DID_LOG: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+        if DID_LOG.set(()).is_ok() {
+            log::warn!(
+                "terminal popup notifications require acp_tabs; dropping {:?} for workspace {workspace_id}",
+                notification
+            );
+        }
     }
 
     #[cfg(feature = "acp_tabs")]
@@ -628,7 +631,7 @@ impl WorkspaceAttentionController {
     fn dismiss_notifications(&mut self, _cx: &mut Context<Self>) {}
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum TerminalLifecycleNotification {
     Completed,
     PermissionRequest,
@@ -6122,7 +6125,7 @@ fn render_workspace_attention_indicator(
     }
 }
 
-fn should_show_native_notification(
+fn should_show_terminal_notification(
     mode: TerminalAgentNotificationMode,
     workspace_id: &str,
     store: &Entity<SuperzentStore>,
@@ -6137,13 +6140,6 @@ fn should_show_native_notification(
                 || store.read(cx).active_workspace_id() != Some(workspace_id)
         }
     }
-}
-
-#[cfg(target_os = "macos")]
-#[link(name = "Foundation", kind = "framework")]
-#[allow(dead_code)]
-unsafe extern "C" {
-    static NSUserNotificationDefaultSoundName: id;
 }
 
 #[cfg(target_os = "macos")]
@@ -6264,39 +6260,6 @@ fn take_native_terminal_notification_activation_receiver() -> Option<SmolReceive
 }
 
 #[cfg(target_os = "macos")]
-#[allow(dead_code)]
-fn dispatch_native_terminal_notification(title: &str, body: &str, workspace_id: &str) {
-    if !install_native_terminal_notification_delegate() {
-        return;
-    }
-
-    let Some(center) = native_terminal_notification_center() else {
-        return;
-    };
-
-    unsafe {
-        let pool = NSAutoreleasePool::new(nil);
-        let notification: id = msg_send![class!(NSUserNotification), new];
-
-        let _: () = msg_send![notification, setTitle: ns_string(title)];
-        let _: () = msg_send![notification, setInformativeText: ns_string(body)];
-        let _: () = msg_send![notification, setIdentifier: ns_string(workspace_id)];
-        let _: () = msg_send![notification, setSoundName: NSUserNotificationDefaultSoundName];
-        let _: () = msg_send![center, deliverNotification: notification];
-        let _: () = msg_send![notification, release];
-        let _: () = msg_send![pool, drain];
-    }
-}
-
-#[cfg(target_os = "macos")]
-/// Allow NSString::alloc use here because it sets autorelease
-#[allow(clippy::disallowed_methods)]
-#[allow(dead_code)]
-unsafe fn ns_string(string: &str) -> id {
-    unsafe { NSString::alloc(nil).init_str(string).autorelease() }
-}
-
-#[cfg(target_os = "macos")]
 unsafe fn ns_string_to_string(string: id) -> Option<String> {
     if string == nil {
         return None;
@@ -6344,10 +6307,6 @@ extern "C" fn native_terminal_notification_should_present(
 ) -> BOOL {
     YES
 }
-
-#[cfg(not(target_os = "macos"))]
-#[allow(dead_code)]
-fn dispatch_native_terminal_notification(_title: &str, _body: &str, _workspace_id: &str) {}
 
 #[cfg(not(target_os = "macos"))]
 fn take_native_terminal_notification_activation_receiver() -> Option<SmolReceiver<String>> {

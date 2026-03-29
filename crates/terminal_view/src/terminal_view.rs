@@ -864,8 +864,10 @@ impl TerminalView {
             terminal.paste(&text);
         });
         if let Some(this) = self.self_handle.upgrade() {
-            let _ = this.update(cx, |_, cx| {
-                cx.emit(Event::Input);
+            cx.defer(move |cx| {
+                let _ = this.update(cx, |_, cx| {
+                    cx.emit(Event::Input);
+                });
             });
         }
     }
