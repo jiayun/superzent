@@ -12,9 +12,7 @@ use agent_ui::{
 use anyhow::Result;
 use chrono::Utc;
 #[cfg(target_os = "macos")]
-use cocoa::{
-    base::{id, nil},
-};
+use cocoa::base::{id, nil};
 use editor::{Editor, EditorEvent, actions::SelectAll};
 use git::repository::validate_worktree_directory;
 use git_ui::git_panel::GitPanel;
