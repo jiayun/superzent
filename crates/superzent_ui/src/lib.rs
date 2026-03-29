@@ -1256,16 +1256,6 @@ fn launch_workspace_preset_in_terminal(
                 }
             };
 
-            let _ = update_store_async(&store, cx, |store, cx| {
-                store.set_workspace_attention(
-                    &workspace_entry.id,
-                    WorkspaceAttentionStatus::Working,
-                    false,
-                    None,
-                    cx,
-                );
-            });
-
             if let Err(error) = terminal.update_in(cx, |terminal, _, _| {
                 let mut command_bytes = command_line.into_bytes();
                 command_bytes.push(b'\r');
@@ -1276,7 +1266,18 @@ fn launch_workspace_preset_in_terminal(
                     format!("Failed to launch {} in terminal: {error}", preset.label),
                     cx,
                 );
+                return Ok::<(), anyhow::Error>(());
             }
+
+            let _ = update_store_async(&store, cx, |store, cx| {
+                store.set_workspace_attention(
+                    &workspace_entry.id,
+                    WorkspaceAttentionStatus::Working,
+                    false,
+                    None,
+                    cx,
+                );
+            });
 
             Ok::<(), anyhow::Error>(())
         })
@@ -6345,6 +6346,7 @@ extern "C" fn native_terminal_notification_should_present(
 }
 
 #[cfg(not(target_os = "macos"))]
+#[allow(dead_code)]
 fn dispatch_native_terminal_notification(_title: &str, _body: &str, _workspace_id: &str) {}
 
 #[cfg(not(target_os = "macos"))]
