@@ -2411,7 +2411,12 @@ impl SuperzentSidebar {
     ) {
         let Some(workspace_id) = ({
             let store = self.store.read(cx);
-            store_workspace_id_for_live_workspace(workspace, &store, None, cx)
+            store_workspace_id_for_live_workspace(
+                workspace,
+                &store,
+                store.active_workspace_id(),
+                cx,
+            )
         }) else {
             return;
         };
