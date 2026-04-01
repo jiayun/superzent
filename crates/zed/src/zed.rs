@@ -5370,7 +5370,10 @@ mod tests {
 
         cx.update(|cx| {
             open_paths(
-                &[PathBuf::from(path!("/root/a.txt")), PathBuf::from(path!("/root/b.txt"))],
+                &[
+                    PathBuf::from(path!("/root/a.txt")),
+                    PathBuf::from(path!("/root/b.txt")),
+                ],
                 app_state.clone(),
                 workspace::OpenOptions {
                     open_new_workspace: Some(false),
@@ -5403,9 +5406,7 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[gpui::test]
-    async fn test_superzent_files_cmd_w_closes_center_item_before_sidebar(
-        cx: &mut TestAppContext,
-    ) {
+    async fn test_superzent_files_cmd_w_closes_center_item_before_sidebar(cx: &mut TestAppContext) {
         let app_state = init_superzent_test(cx);
         app_state
             .fs
@@ -5426,7 +5427,10 @@ mod tests {
 
         cx.update(|cx| {
             open_paths(
-                &[PathBuf::from(path!("/root/a.txt")), PathBuf::from(path!("/root/b.txt"))],
+                &[
+                    PathBuf::from(path!("/root/a.txt")),
+                    PathBuf::from(path!("/root/b.txt")),
+                ],
                 app_state.clone(),
                 workspace::OpenOptions {
                     open_new_workspace: Some(false),
@@ -5535,9 +5539,7 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[gpui::test]
-    async fn test_superzent_external_right_panel_cmd_w_closes_active_dock(
-        cx: &mut TestAppContext,
-    ) {
+    async fn test_superzent_external_right_panel_cmd_w_closes_active_dock(cx: &mut TestAppContext) {
         let app_state = init_superzent_test(cx);
         app_state
             .fs
@@ -5606,7 +5608,10 @@ mod tests {
 
         cx.update(|cx| {
             open_paths(
-                &[PathBuf::from(path!("/root/a.txt")), PathBuf::from(path!("/root/b.txt"))],
+                &[
+                    PathBuf::from(path!("/root/a.txt")),
+                    PathBuf::from(path!("/root/b.txt")),
+                ],
                 app_state.clone(),
                 workspace::OpenOptions {
                     open_new_workspace: Some(false),
