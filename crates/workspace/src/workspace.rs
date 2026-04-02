@@ -8644,11 +8644,13 @@ pub fn preferred_workspace_window(cx: &App) -> Option<WindowHandle<MultiWorkspac
     // otherwise reuse the first one we already have instead of spawning another.
     cx.active_window()
         .and_then(|window| window.downcast::<MultiWorkspace>())
+        .filter(|window| window.read(cx).is_ok())
         .or_else(|| {
             cx.window_stack()
                 .unwrap_or_else(|| cx.windows())
                 .into_iter()
-                .find_map(|window| window.downcast::<MultiWorkspace>())
+                .filter_map(|window| window.downcast::<MultiWorkspace>())
+                .find(|window| window.read(cx).is_ok())
         })
 }
 
