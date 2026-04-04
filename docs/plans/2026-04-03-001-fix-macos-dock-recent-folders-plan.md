@@ -136,17 +136,17 @@ surfaces.
 
 ## High-Level Technical Design
 
-> *This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce.*
+> _This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce._
 
-| Trigger | Effective `show_dock_recent_folders` | Intended outcome |
-|---|---|---|
-| App startup | `false` | Clear app-level recent documents once |
-| Settings reload `true -> false` | `false` | Clear app-level recent documents immediately |
-| Settings reload `false -> false` | `false` | No duplicate work beyond the startup clear |
-| Settings reload `false -> true` | `true` | Do not repopulate history retroactively |
-| Visible local worktree created | `true` | Add the worktree path to recent documents |
-| Visible local worktree created | `false` | Skip platform registration |
-| Recent Projects UI queries | any | Continue reading workspace DB with no behavior change |
+| Trigger                          | Effective `show_dock_recent_folders` | Intended outcome                                      |
+| -------------------------------- | ------------------------------------ | ----------------------------------------------------- |
+| App startup                      | `false`                              | Clear app-level recent documents once                 |
+| Settings reload `true -> false`  | `false`                              | Clear app-level recent documents immediately          |
+| Settings reload `false -> false` | `false`                              | No duplicate work beyond the startup clear            |
+| Settings reload `false -> true`  | `true`                               | Do not repopulate history retroactively               |
+| Visible local worktree created   | `true`                               | Add the worktree path to recent documents             |
+| Visible local worktree created   | `false`                              | Skip platform registration                            |
+| Recent Projects UI queries       | any                                  | Continue reading workspace DB with no behavior change |
 
 ## Implementation Units
 
@@ -160,6 +160,7 @@ documents in addition to adding them.
 **Dependencies:** None
 
 **Files:**
+
 - Modify: `crates/settings_content/src/workspace.rs`
 - Modify: `crates/settings/src/settings_store.rs`
 - Modify: `crates/workspace/src/workspace_settings.rs`
@@ -172,6 +173,7 @@ documents in addition to adding them.
 - Test: `crates/project/tests/integration/project_tests.rs`
 
 **Approach:**
+
 - Add `show_dock_recent_folders: Option<bool>` to `WorkspaceSettingsContent` with a doc comment
   that marks it as macOS-only and JSON-only for now.
 - Keep the field out of `ProjectSettingsContent` so it is valid in user settings schema but not
@@ -187,6 +189,7 @@ documents in addition to adding them.
   times the clear operation ran.
 
 **Patterns to follow:**
+
 - `crates/workspace/src/workspace_settings.rs` runtime mapping style for workspace settings
 - `crates/settings/src/settings_store.rs` user-vs-project schema split
 - `crates/gpui/src/app.rs` and `crates/gpui/src/platform.rs` pairing around
@@ -194,6 +197,7 @@ documents in addition to adding them.
 - `crates/gpui/src/app/test_context.rs` helper exposure pattern for platform-observable effects
 
 **Test scenarios:**
+
 - Happy path: with explicit `show_dock_recent_folders = true`, the effective runtime setting
   remains enabled and downstream callers can still record recent documents.
 - Edge case: when the setting is omitted, the effective runtime value resolves to the platform
@@ -206,6 +210,7 @@ documents in addition to adding them.
   the existing add path.
 
 **Verification:**
+
 - The settings schema exposes the new key for `settings.json`.
 - The project settings schema does not expose the new key.
 - Test infrastructure can observe both "recent document added" and "recent documents cleared"
@@ -221,10 +226,12 @@ setting is disabled, while preserving all current worktree creation behavior.
 **Dependencies:** Unit 1
 
 **Files:**
+
 - Modify: `crates/project/src/worktree_store.rs`
 - Test: `crates/project/tests/integration/project_tests.rs`
 
 **Approach:**
+
 - At the existing `visible` call site, read `WorkspaceSettings::get_global(cx)` and gate
   `cx.add_recent_document(...)` on the new effective boolean.
 - Keep the current `visible` requirement intact so invisible worktrees continue to skip recent
@@ -237,11 +244,13 @@ setting is disabled, while preserving all current worktree creation behavior.
 platform recent-document side effect.
 
 **Patterns to follow:**
+
 - The existing `visible` guard around `cx.add_recent_document(...)` in
   `crates/project/src/worktree_store.rs`
 - Settings mutation style in `crates/project/tests/integration/project_tests.rs`
 
 **Test scenarios:**
+
 - Happy path: creating a visible local worktree with `show_dock_recent_folders = true` records
   the worktree path in the test platform's recent-document list.
 - Edge case: creating a visible local worktree with `show_dock_recent_folders = false` does not
@@ -252,6 +261,7 @@ platform recent-document side effect.
   the setting only gates the platform side effect.
 
 **Verification:**
+
 - The only observable behavior change is whether the recent-document recorder changes; worktree
   creation and project state remain intact.
 
@@ -265,10 +275,12 @@ startup and on enabled-to-disabled settings changes.
 **Dependencies:** Unit 1
 
 **Files:**
+
 - Modify: `crates/zed/src/zed.rs`
 - Test: `crates/zed/src/zed.rs`
 
 **Approach:**
+
 - Add a small helper invoked from `zed::init(cx)` that:
   - reads the effective `WorkspaceSettings::get_global(cx).show_dock_recent_folders` value once
     during init and clears recent documents immediately when it is `false`
@@ -282,11 +294,13 @@ startup and on enabled-to-disabled settings changes.
   app-internal Recent Projects remains DB-backed and unchanged.
 
 **Patterns to follow:**
+
 - Prior-value observer logic in `crates/zed/src/zed.rs` (`handle_keymap_file_changes`)
 - Existing settings observer registration style in `crates/zed/src/zed.rs`
 - Existing `init_test(cx); cx.update(init);` test setup pattern in `crates/zed/src/zed.rs`
 
 **Test scenarios:**
+
 - Happy path: when user settings explicitly set `show_dock_recent_folders = false` before
   `zed::init`, startup clears the test platform's recent documents exactly once.
 - Edge case: when the setting is omitted, startup still clears recent documents on macOS because
@@ -304,6 +318,7 @@ startup and on enabled-to-disabled settings changes.
   Unit 2.
 
 **Verification:**
+
 - Startup and runtime-disable flows both converge on the same clear side effect.
 - No code path touches the DB-backed recent-project surfaces.
 
@@ -325,11 +340,11 @@ startup and on enabled-to-disabled settings changes.
 
 ## Risks & Dependencies
 
-| Risk | Mitigation |
-|------|------------|
+| Risk                                                                                           | Mitigation                                                                                                                                                        |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `clear_recent_documents` is app-wide and would clear any future recent-document call sites too | Keep the API addition tightly documented, note the current single caller in code comments or tests, and avoid broadening recent-document usage in the same change |
-| Startup/settings observers could clear repeatedly on every settings reload | Track the previous effective boolean and assert idempotent behavior in tests |
-| The new setting might accidentally leak into Settings UI | Limit changes to `settings_content` and `workspace_settings`; do not add a `settings_ui` page-data entry in this phase |
+| Startup/settings observers could clear repeatedly on every settings reload                     | Track the previous effective boolean and assert idempotent behavior in tests                                                                                      |
+| The new setting might accidentally leak into Settings UI                                       | Limit changes to `settings_content` and `workspace_settings`; do not add a `settings_ui` page-data entry in this phase                                            |
 
 ## Documentation / Operational Notes
 
