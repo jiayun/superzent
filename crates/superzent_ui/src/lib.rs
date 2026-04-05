@@ -87,7 +87,7 @@ use workspace::{
 };
 #[cfg(feature = "acp_tabs")]
 use zed_actions::AcpRegistry;
-use zed_actions::{OpenRemote, OpenSettingsAt};
+use zed_actions::{OpenRecent, OpenRemote, OpenSettingsAt};
 
 actions!(
     superzent,
@@ -826,8 +826,16 @@ pub fn init(cx: &mut App) {
                     run_open_workspace_in_new_window(workspace, window, cx);
                 })
                 .register_action(|workspace, _: &workspace::CloseWindow, window, cx| {
+                    // When the active pane has no items, absorb the event
+                    // so Cmd+W does nothing instead of closing the window.
+                    if workspace.active_pane().read(cx).items_len() == 0 {
+                        return;
+                    }
+
                     let right_dock = workspace.right_dock().clone();
-                    if !right_dock.read(cx).is_open() {
+                    if !right_dock.read(cx).is_open()
+                        || !right_dock.focus_handle(cx).contains_focused(window, cx)
+                    {
                         cx.propagate();
                         return;
                     }
@@ -874,37 +882,6 @@ pub fn init(cx: &mut App) {
                                         cx,
                                     )
                                     .detach_and_log_err(cx);
-                                });
-                            } else {
-                                let workspace_id = cx.entity().entity_id();
-                                window.defer(cx, move |window, cx| {
-                                    let Some(multi_workspace) =
-                                        window.window_handle().downcast::<MultiWorkspace>()
-                                    else {
-                                        return;
-                                    };
-
-                                    if let Err(error) =
-                                        multi_workspace.update(cx, |multi_workspace, window, cx| {
-                                            let Some(index) = multi_workspace
-                                                .workspaces()
-                                                .iter()
-                                                .position(|candidate| {
-                                                    candidate.entity_id() == workspace_id
-                                                })
-                                            else {
-                                                return;
-                                            };
-
-                                            multi_workspace
-                                                .close_workspace_at_index(index, window, cx)
-                                                .detach_and_log_err(cx);
-                                        })
-                                    {
-                                        log::error!(
-                                            "failed to close workspace in current window: {error:#}"
-                                        );
-                                    }
                                 });
                             }
                         }
@@ -3694,9 +3671,17 @@ impl SuperzentEmptyPaneView {
     fn mode(&self, cx: &App) -> EmptyPaneMode {
         let store = self.store.read(cx);
         if store.projects().is_empty() || store.workspaces().is_empty() {
-            EmptyPaneMode::Initial
-        } else {
+            return EmptyPaneMode::Initial;
+        }
+
+        let has_worktrees = self
+            .current_workspace_entity(cx)
+            .is_some_and(|ws| ws.read(cx).project().read(cx).visible_worktrees(cx).next().is_some());
+
+        if has_worktrees {
             EmptyPaneMode::Workspace
+        } else {
+            EmptyPaneMode::Initial
         }
     }
 
@@ -3747,18 +3732,30 @@ impl Render for SuperzentEmptyPaneView {
         };
 
         let buttons = match mode {
-            EmptyPaneMode::Initial => vec![self.action_button(
-                "superzent-empty-add-project",
-                "Add Project",
-                IconName::OpenFolder,
-                true,
-                |this, window, cx| {
-                    if let Some(current_workspace) = this.current_workspace_entity(cx) {
-                        run_add_project_from_store(current_workspace, window, cx);
-                    }
-                },
-                cx,
-            )],
+            EmptyPaneMode::Initial => vec![
+                self.action_button(
+                    "superzent-empty-add-project",
+                    "Add Project",
+                    IconName::OpenFolder,
+                    true,
+                    |this, window, cx| {
+                        if let Some(current_workspace) = this.current_workspace_entity(cx) {
+                            run_add_project_from_store(current_workspace, window, cx);
+                        }
+                    },
+                    cx,
+                ),
+                self.action_button(
+                    "superzent-empty-open-recent",
+                    "Open Recent",
+                    IconName::HistoryRerun,
+                    false,
+                    |_this, window, cx| {
+                        window.dispatch_action(Box::new(OpenRecent::default()), cx);
+                    },
+                    cx,
+                ),
+            ],
             EmptyPaneMode::Workspace => vec![
                 self.action_button(
                     "superzent-empty-new-terminal",
@@ -4016,7 +4013,7 @@ impl SuperzentRightSidebar {
     ) -> Self {
         let store = SuperzentStore::global(cx);
         let mut subscriptions = vec![cx.observe(&store, |_, _, cx| cx.notify())];
-        let workspace_for_restore = workspace.clone();
+        let workspace_for_restore = workspace;
         subscriptions.push(cx.observe_in(&right_dock, window, {
             move |this, dock, window, cx| {
                 this.restore_active_sidebar(workspace_for_restore.clone(), dock, window, cx);
