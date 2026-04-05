@@ -135,12 +135,12 @@ separation.
 
 > _This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce._
 
-| Build / state    | Provider in settings       | Entry behavior                                      | Prediction runtime         |
-| ---------------- | -------------------------- | --------------------------------------------------- | -------------------------- |
-| Default build    | `none` or missing          | Visible footer entry; click opens provider setup    | Disabled                   |
-| Default build    | Supported non-Zed provider | Visible footer entry with provider-specific menu    | Enabled in editor buffers  |
-| Default build    | `zed`                      | Visible footer entry; treated like unconfigured     | Disabled                   |
-| Full/debug build | `zed`                      | Existing upstream behavior                          | Existing upstream behavior |
+| Build / state    | Provider in settings       | Entry behavior                                   | Prediction runtime         |
+| ---------------- | -------------------------- | ------------------------------------------------ | -------------------------- |
+| Default build    | `none` or missing          | Visible footer entry; click opens provider setup | Disabled                   |
+| Default build    | Supported non-Zed provider | Visible footer entry with provider-specific menu | Enabled in editor buffers  |
+| Default build    | `zed`                      | Visible footer entry; treated like unconfigured  | Disabled                   |
+| Full/debug build | `zed`                      | Existing upstream behavior                       | Existing upstream behavior |
 
 ## Implementation Units
 
@@ -271,7 +271,7 @@ supported providers from the default build.
 - Change the `EditPredictionProvider::None`/unsupported rendering path so the footer entry stays
   visible and routes the user into provider setup instead of hiding entirely.
 - Reuse the existing menu structure for configured-provider states, including `Predict Edit at
-  Cursor`, mode toggles where they still apply, provider switching, and `Configure Providers`.
+Cursor`, mode toggles where they still apply, provider switching, and `Configure Providers`.
 - Restore or re-add the `edit_predictions.providers` settings subpage path so
   `OpenSettingsAt { path: "edit_predictions.providers" }` works in the default build and aligns
   with the existing visual test expectation.

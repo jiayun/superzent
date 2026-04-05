@@ -15,7 +15,16 @@ severity: high
 related_components:
   - assistant
   - documentation
-tags: [next-edit, edit-prediction, feature-gating, provider-policy, disable-ai, copilot-chat, footer-entry]
+tags:
+  [
+    next-edit,
+    edit-prediction,
+    feature-gating,
+    provider-policy,
+    disable-ai,
+    copilot-chat,
+    footer-entry,
+  ]
 ---
 
 # Restoring default-build next-edit requires separating it from hosted AI surfaces
