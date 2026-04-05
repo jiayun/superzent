@@ -202,6 +202,7 @@ struct LiveTerminalAttention {
 struct WorkspaceAttentionController {
     store: Entity<SuperzentStore>,
     terminal_ids_by_entity: BTreeMap<EntityId, String>,
+    workspace_ids_by_terminal: BTreeMap<String, String>,
     live_terminal_attention: BTreeMap<String, LiveTerminalAttention>,
     #[cfg(feature = "acp_tabs")]
     notifications: Vec<WindowHandle<AgentNotification>>,
@@ -209,6 +210,12 @@ struct WorkspaceAttentionController {
     notification_subscriptions: Vec<Subscription>,
     _hook_task: Task<Result<()>>,
     _notification_activation_task: Task<Result<()>>,
+}
+
+fn debug_terminal_notifications_enabled() -> bool {
+    std::env::var("SUPERZENT_DEBUG_HOOKS")
+        .map(|value| !matches!(value.as_str(), "0" | "false" | "FALSE" | "False"))
+        .unwrap_or(false)
 }
 
 impl WorkspaceAttentionController {
@@ -244,6 +251,7 @@ impl WorkspaceAttentionController {
         Self {
             store,
             terminal_ids_by_entity: BTreeMap::new(),
+            workspace_ids_by_terminal: BTreeMap::new(),
             live_terminal_attention: BTreeMap::new(),
             #[cfg(feature = "acp_tabs")]
             notifications: Vec::new(),
@@ -258,6 +266,7 @@ impl WorkspaceAttentionController {
         &mut self,
         terminal: Entity<T>,
         terminal_id: String,
+        workspace_id: Option<String>,
         cx: &mut Context<Self>,
     ) where
         T: 'static,
@@ -265,6 +274,10 @@ impl WorkspaceAttentionController {
         let entity_id = terminal.entity_id();
         self.terminal_ids_by_entity
             .insert(entity_id, terminal_id.clone());
+        if let Some(workspace_id) = workspace_id {
+            self.workspace_ids_by_terminal
+                .insert(terminal_id.clone(), workspace_id);
+        }
 
         cx.observe_release(&terminal, move |this, _, cx| {
             this.unregister_terminal(&terminal_id, entity_id, cx);
@@ -279,8 +292,13 @@ impl WorkspaceAttentionController {
         cx: &mut Context<Self>,
     ) {
         self.terminal_ids_by_entity.remove(&entity_id);
-        if let Some(live_attention) = self.live_terminal_attention.remove(terminal_id) {
-            self.recompute_workspace_attention(&live_attention.workspace_id, cx);
+        let tracked_workspace_id = self.workspace_ids_by_terminal.remove(terminal_id);
+        let workspace_id = workspace_id_for_terminal_unregister(
+            self.live_terminal_attention.remove(terminal_id).as_ref(),
+            tracked_workspace_id.as_deref(),
+        );
+        if let Some(workspace_id) = workspace_id {
+            self.recompute_workspace_attention(&workspace_id, cx);
         }
     }
 
@@ -320,6 +338,16 @@ impl WorkspaceAttentionController {
     }
 
     fn handle_hook_event(&mut self, event: AgentHookEvent, cx: &mut Context<Self>) {
+        if debug_terminal_notifications_enabled() {
+            log::info!(
+                "superzent notification hook received: type={:?} terminal_id={} workspace_id={:?} session_id={:?} cwd={:?}",
+                event.event_type,
+                event.terminal_id,
+                event.workspace_id,
+                event.session_id,
+                event.cwd,
+            );
+        }
         let Some((workspace_id, workspace_name)) = self
             .resolve_workspace_for_event(&event, cx)
             .map(|workspace| {
@@ -329,9 +357,29 @@ impl WorkspaceAttentionController {
                 )
             })
         else {
-            log::debug!("ignoring agent hook event without a matching workspace");
+            if debug_terminal_notifications_enabled() {
+                log::warn!(
+                    "superzent notification hook could not resolve workspace: type={:?} terminal_id={} workspace_id={:?} session_id={:?} cwd={:?}",
+                    event.event_type,
+                    event.terminal_id,
+                    event.workspace_id,
+                    event.session_id,
+                    event.cwd,
+                );
+            } else {
+                log::debug!("ignoring agent hook event without a matching workspace");
+            }
             return;
         };
+
+        if debug_terminal_notifications_enabled() {
+            log::info!(
+                "superzent notification hook resolved workspace: event={:?} workspace_id={} workspace_name={}",
+                event.event_type,
+                workspace_id,
+                workspace_name,
+            );
+        }
 
         match event.event_type {
             AgentHookEventType::Start => {
@@ -380,27 +428,28 @@ impl WorkspaceAttentionController {
             }
             AgentHookEventType::Stop => {
                 self.live_terminal_attention.remove(&event.terminal_id);
-
-                let review_pending = !self.workspace_is_visible(&workspace_id, cx);
+                let (attention_status, review_pending) =
+                    workspace_attention_for_terminal_status(&TaskStatus::Completed)
+                        .expect("completed terminal status should map to attention");
                 self.store.update(cx, |store, cx| {
                     store.set_workspace_attention(
                         &workspace_id,
-                        WorkspaceAttentionStatus::Idle,
+                        attention_status,
                         review_pending,
-                        review_pending.then(|| "Agent task completed".to_string()),
+                        workspace_attention_reason_for_terminal_status(
+                            &TaskStatus::Completed,
+                            None,
+                        ),
                         cx,
                     );
                 });
                 self.recompute_workspace_attention(&workspace_id, cx);
-
-                if review_pending {
-                    self.maybe_show_terminal_notification(
-                        TerminalLifecycleNotification::Completed,
-                        &workspace_id,
-                        &workspace_name,
-                        cx,
-                    );
-                }
+                self.maybe_show_terminal_notification(
+                    TerminalLifecycleNotification::Completed,
+                    &workspace_id,
+                    &workspace_name,
+                    cx,
+                );
             }
         }
     }
@@ -451,11 +500,6 @@ impl WorkspaceAttentionController {
                 cx,
             );
         });
-    }
-
-    fn workspace_is_visible(&self, workspace_id: &str, cx: &App) -> bool {
-        cx.active_window().is_some()
-            && self.store.read(cx).active_workspace_id() == Some(workspace_id)
     }
 
     fn handle_native_notification_activation(
@@ -527,7 +571,19 @@ impl WorkspaceAttentionController {
         cx: &mut Context<Self>,
     ) {
         let mode = TerminalSettings::get_global(cx).agent_notifications;
-        if !should_show_terminal_notification(mode, workspace_id, &self.store, cx) {
+        let should_show = should_show_terminal_notification(mode, workspace_id, &self.store, cx);
+        if debug_terminal_notifications_enabled() {
+            log::info!(
+                "superzent notification policy: event={:?} mode={:?} workspace_id={} active_window={} active_workspace_id={:?} should_show={}",
+                notification,
+                mode,
+                workspace_id,
+                cx.active_window().is_some(),
+                self.store.read(cx).active_workspace_id(),
+                should_show,
+            );
+        }
+        if !should_show {
             return;
         }
 
@@ -542,12 +598,23 @@ impl WorkspaceAttentionController {
         workspace_name: &str,
         cx: &mut Context<Self>,
     ) {
+        if debug_terminal_notifications_enabled() {
+            log::info!(
+                "superzent popup opening: event={:?} workspace_id={} workspace_name={}",
+                notification,
+                workspace_id,
+                workspace_name,
+            );
+        }
         self.dismiss_notifications(cx);
 
         let Some(screen) = cx
             .primary_display()
             .or_else(|| cx.displays().into_iter().next())
         else {
+            if debug_terminal_notifications_enabled() {
+                log::warn!("superzent popup aborted: no display available");
+            }
             return;
         };
 
@@ -587,6 +654,14 @@ impl WorkspaceAttentionController {
                 return;
             }
         };
+
+        if debug_terminal_notifications_enabled() {
+            log::info!(
+                "superzent popup opened successfully: event={:?} workspace_id={}",
+                notification,
+                workspace_id,
+            );
+        }
 
         let workspace_id = workspace_id.to_string();
         self.notification_subscriptions
@@ -697,7 +772,12 @@ pub fn init(cx: &mut App) {
             };
 
             attention_controller.update(cx, |controller, cx| {
-                controller.register_terminal(terminal, terminal_id.clone(), cx);
+                controller.register_terminal(
+                    terminal,
+                    terminal_id.clone(),
+                    workspace_id.clone(),
+                    cx,
+                );
             });
 
             let Some(workspace_id) = workspace_id else {
@@ -1084,7 +1164,7 @@ fn launch_workspace_preset(
                     workspace_handle,
                     workspace_entry,
                     preset,
-                    task_prompt,
+                    Some(task_prompt),
                     window,
                     cx,
                 );
@@ -1353,7 +1433,7 @@ fn launch_workspace_preset_task(
     workspace_handle: Entity<Workspace>,
     workspace_entry: WorkspaceEntry,
     preset: AgentPreset,
-    task_prompt: String,
+    task_prompt: Option<String>,
     window: &mut Window,
     cx: &mut App,
 ) {
@@ -1362,7 +1442,7 @@ fn launch_workspace_preset_task(
         store.start_session(
             &workspace_entry.id,
             &preset,
-            session_label_for_prompt(&preset, Some(task_prompt.as_str())),
+            session_label_for_prompt(&preset, task_prompt.as_deref()),
             cx,
         )
     });
@@ -1403,6 +1483,17 @@ fn launch_workspace_preset_task(
                 Ok(terminal) => {
                     if update_store_async(&store, cx, |store, cx| {
                         store.update_session_status(&session.id, TaskStatus::Running, None, cx);
+                        if let Some((attention_status, review_pending)) =
+                            workspace_attention_for_terminal_status(&TaskStatus::Running)
+                        {
+                            store.set_workspace_attention(
+                                &workspace_entry.id,
+                                attention_status,
+                                review_pending,
+                                None,
+                                cx,
+                            );
+                        }
                     })
                     .is_none()
                     {
@@ -1429,25 +1520,41 @@ fn launch_workspace_preset_task(
                 }
             };
 
-            if let Err(error) = terminal.update_in(cx, |terminal, _, _| {
-                let prompt = format!("{task_prompt}\n");
-                terminal.input(prompt.into_bytes());
-            }) {
-                let reason = format!("Failed to send initial prompt: {error}");
-                if update_store_async(&store, cx, |store, cx| {
-                    store.update_session_status(
-                        &session.id,
-                        TaskStatus::Failed,
-                        Some(reason.clone()),
-                        cx,
-                    );
-                })
-                .is_none()
-                {
+            if let Some(task_prompt) = task_prompt.clone() {
+                if let Err(error) = terminal.update_in(cx, |terminal, _, _| {
+                    let prompt = format!("{task_prompt}\n");
+                    terminal.input(prompt.into_bytes());
+                }) {
+                    let reason = format!("Failed to send initial prompt: {error}");
+                    if update_store_async(&store, cx, |store, cx| {
+                        store.update_session_status(
+                            &session.id,
+                            TaskStatus::Failed,
+                            Some(reason.clone()),
+                            cx,
+                        );
+                        if let Some((attention_status, review_pending)) =
+                            workspace_attention_for_terminal_status(&TaskStatus::Failed)
+                        {
+                            store.set_workspace_attention(
+                                &workspace_entry.id,
+                                attention_status,
+                                review_pending,
+                                workspace_attention_reason_for_terminal_status(
+                                    &TaskStatus::Failed,
+                                    Some(reason.clone()),
+                                ),
+                                cx,
+                            );
+                        }
+                    })
+                    .is_none()
+                    {
+                        return Ok::<(), anyhow::Error>(());
+                    }
+                    show_workspace_toast_async(&workspace_handle, reason, cx);
                     return Ok::<(), anyhow::Error>(());
                 }
-                show_workspace_toast_async(&workspace_handle, reason, cx);
-                return Ok::<(), anyhow::Error>(());
             }
 
             let exit_status = match terminal
@@ -1496,7 +1603,18 @@ fn launch_workspace_preset_task(
             };
 
             if update_store_async(&store, cx, |store, cx| {
-                store.update_session_status(&session.id, status, reason.clone(), cx);
+                store.update_session_status(&session.id, status.clone(), reason.clone(), cx);
+                if let Some((attention_status, review_pending)) =
+                    workspace_attention_for_terminal_status(&status)
+                {
+                    store.set_workspace_attention(
+                        &workspace_entry.id,
+                        attention_status,
+                        review_pending,
+                        workspace_attention_reason_for_terminal_status(&status, reason.clone()),
+                        cx,
+                    );
+                }
             })
             .is_none()
             {
@@ -1509,6 +1627,25 @@ fn launch_workspace_preset_task(
             Ok::<(), anyhow::Error>(())
         })
         .detach();
+}
+
+fn session_label_for_prompt(preset: &AgentPreset, task_prompt: Option<&str>) -> String {
+    let Some(task_prompt) = task_prompt
+        .map(str::trim)
+        .filter(|task_prompt| !task_prompt.is_empty())
+    else {
+        return preset.label.clone();
+    };
+
+    let preview = task_prompt.lines().next().unwrap_or(task_prompt);
+    let preview = if preview.chars().count() > 48 {
+        let truncated = preview.chars().take(45).collect::<String>();
+        format!("{truncated}...")
+    } else {
+        preview.to_string()
+    };
+
+    format!("{}: {}", preset.label, preview)
 }
 
 fn preset_shell_kind(workspace: &Workspace, workspace_path: &PathBuf, cx: &App) -> ShellKind {
@@ -1541,25 +1678,6 @@ fn render_preset_command_line(command: &str, args: &[String], shell_kind: ShellK
             .unwrap_or_else(|| argument.clone())
     }));
     parts.join(" ")
-}
-
-fn session_label_for_prompt(preset: &AgentPreset, task_prompt: Option<&str>) -> String {
-    let Some(task_prompt) = task_prompt
-        .map(str::trim)
-        .filter(|task_prompt| !task_prompt.is_empty())
-    else {
-        return preset.label.clone();
-    };
-
-    let preview = task_prompt.lines().next().unwrap_or(task_prompt);
-    let preview = if preview.chars().count() > 48 {
-        let truncated = preview.chars().take(45).collect::<String>();
-        format!("{truncated}...")
-    } else {
-        preview.to_string()
-    };
-
-    format!("{}: {}", preset.label, preview)
 }
 
 fn show_workspace_toast(
@@ -2448,6 +2566,22 @@ impl SuperzentSidebar {
         });
     }
 
+    fn is_workspace_open_in_current_window(
+        &self,
+        workspace_entry: &WorkspaceEntry,
+        cx: &App,
+    ) -> bool {
+        let Some(multi_workspace) = self.multi_workspace.upgrade() else {
+            return false;
+        };
+
+        multi_workspace
+            .read(cx)
+            .workspaces()
+            .iter()
+            .any(|workspace| workspace_matches_entry(workspace, workspace_entry, cx))
+    }
+
     fn mark_workspace_deleting(
         &mut self,
         workspace_id: &str,
@@ -3084,6 +3218,7 @@ impl SuperzentSidebar {
     ) -> impl IntoElement {
         let selected = self.store.read(cx).active_workspace_id() == Some(workspace.id.as_str());
         let is_deleting = self.workspace_is_deleting(&workspace.id);
+        let is_open_in_current_window = self.is_workspace_open_in_current_window(workspace, cx);
         let attention_status = workspace.attention_status.clone();
         let workspace_for_open = workspace.clone();
         let workspace_for_delete = workspace.clone();
@@ -3095,7 +3230,12 @@ impl SuperzentSidebar {
         };
         let branch_subtitle = workspace_branch_subtitle(workspace);
         let has_branch_subtitle = branch_subtitle.is_some();
-        let git_status_pill = render_workspace_git_status_pill(workspace, cx);
+        let row_status_pill = match workspace_row_status_kind(workspace, is_open_in_current_window)
+        {
+            WorkspaceRowStatusKind::Hidden => None,
+            WorkspaceRowStatusKind::Open => Some(render_workspace_open_pill(cx)),
+            WorkspaceRowStatusKind::GitChanges => render_workspace_git_status_pill(workspace, cx),
+        };
 
         v_flex()
             .w_full()
@@ -3244,8 +3384,8 @@ impl SuperzentSidebar {
                                                         )
                                                     }),
                                             )
-                                            .when_some(git_status_pill, |this, git_status_pill| {
-                                                this.child(git_status_pill)
+                                            .when_some(row_status_pill, |this, row_status_pill| {
+                                                this.child(row_status_pill)
                                             }),
                                     ),
                             ),
@@ -6240,8 +6380,71 @@ fn next_terminal_input_attention_status(
 ) -> Option<WorkspaceAttentionStatus> {
     match current_live_status {
         Some(WorkspaceAttentionStatus::Permission) => None,
-        _ => Some(WorkspaceAttentionStatus::Working),
+        Some(_) => Some(WorkspaceAttentionStatus::Working),
+        None => None,
     }
+}
+
+fn workspace_attention_for_terminal_status(
+    status: &TaskStatus,
+) -> Option<(WorkspaceAttentionStatus, bool)> {
+    match status {
+        TaskStatus::Running => Some((WorkspaceAttentionStatus::Working, false)),
+        TaskStatus::Completed | TaskStatus::Failed | TaskStatus::NeedsAttention => {
+            Some((WorkspaceAttentionStatus::Review, true))
+        }
+        TaskStatus::Idle | TaskStatus::Starting => None,
+    }
+}
+
+fn workspace_attention_reason_for_terminal_status(
+    status: &TaskStatus,
+    reason: Option<String>,
+) -> Option<String> {
+    match status {
+        TaskStatus::Completed => Some("Agent task completed".to_string()),
+        TaskStatus::Failed | TaskStatus::NeedsAttention => reason,
+        TaskStatus::Idle | TaskStatus::Starting | TaskStatus::Running => None,
+    }
+}
+
+fn workspace_id_for_terminal_unregister(
+    live_attention: Option<&LiveTerminalAttention>,
+    tracked_workspace_id: Option<&str>,
+) -> Option<String> {
+    live_attention
+        .map(|attention| attention.workspace_id.clone())
+        .or_else(|| tracked_workspace_id.map(ToOwned::to_owned))
+}
+
+fn workspace_row_status_kind(
+    workspace: &WorkspaceEntry,
+    is_open_in_current_window: bool,
+) -> WorkspaceRowStatusKind {
+    if !is_open_in_current_window {
+        return WorkspaceRowStatusKind::Hidden;
+    }
+
+    if workspace_git_status_visual_summary(workspace).is_some() {
+        WorkspaceRowStatusKind::GitChanges
+    } else {
+        WorkspaceRowStatusKind::Open
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WorkspaceRowStatusKind {
+    Hidden,
+    Open,
+    GitChanges,
+}
+
+fn render_workspace_open_pill(cx: &mut Context<SuperzentSidebar>) -> gpui::AnyElement {
+    Chip::new("Open")
+        .label_color(Color::Muted)
+        .bg_color(cx.theme().colors().element_background)
+        .border_color(cx.theme().colors().border_variant)
+        .into_any_element()
 }
 
 fn render_workspace_attention_indicator(
@@ -6304,13 +6507,28 @@ fn should_show_terminal_notification(
     store: &Entity<SuperzentStore>,
     cx: &App,
 ) -> bool {
+    let has_active_window = cx.active_window().is_some();
+    let active_workspace_id = store.read(cx).active_workspace_id();
+    should_show_terminal_notification_for_context(
+        mode,
+        has_active_window,
+        active_workspace_id,
+        workspace_id,
+    )
+}
+
+fn should_show_terminal_notification_for_context(
+    mode: TerminalAgentNotificationMode,
+    has_active_window: bool,
+    active_workspace_id: Option<&str>,
+    workspace_id: &str,
+) -> bool {
     match mode {
         TerminalAgentNotificationMode::Off => false,
         TerminalAgentNotificationMode::Always => true,
-        TerminalAgentNotificationMode::AppBackground => cx.active_window().is_none(),
+        TerminalAgentNotificationMode::AppBackground => !has_active_window,
         TerminalAgentNotificationMode::WorkspaceHidden => {
-            cx.active_window().is_none()
-                || store.read(cx).active_workspace_id() != Some(workspace_id)
+            !has_active_window || active_workspace_id != Some(workspace_id)
         }
     }
 }
@@ -6760,6 +6978,82 @@ mod tests {
     }
 
     #[test]
+    fn terminal_input_only_restores_working_for_tracked_live_terminal() {
+        assert_eq!(next_terminal_input_attention_status(None), None);
+        assert_eq!(
+            next_terminal_input_attention_status(Some(&WorkspaceAttentionStatus::Working)),
+            Some(WorkspaceAttentionStatus::Working)
+        );
+    }
+
+    #[test]
+    fn terminal_input_preserves_permission_attention() {
+        assert_eq!(
+            next_terminal_input_attention_status(Some(&WorkspaceAttentionStatus::Permission)),
+            None
+        );
+    }
+
+    #[test]
+    fn running_terminal_status_maps_to_working_without_review_pending() {
+        assert_eq!(
+            workspace_attention_for_terminal_status(&TaskStatus::Running),
+            Some((WorkspaceAttentionStatus::Working, false))
+        );
+        assert_eq!(
+            workspace_attention_reason_for_terminal_status(&TaskStatus::Running, None),
+            None
+        );
+    }
+
+    #[test]
+    fn completed_terminal_status_maps_to_review_with_default_reason() {
+        assert_eq!(
+            workspace_attention_for_terminal_status(&TaskStatus::Completed),
+            Some((WorkspaceAttentionStatus::Review, true))
+        );
+        assert_eq!(
+            workspace_attention_reason_for_terminal_status(&TaskStatus::Completed, None),
+            Some("Agent task completed".to_string())
+        );
+    }
+
+    #[test]
+    fn failed_terminal_status_preserves_failure_reason_for_review_attention() {
+        let reason = Some("Codex exited with code 1.".to_string());
+
+        assert_eq!(
+            workspace_attention_for_terminal_status(&TaskStatus::Failed),
+            Some((WorkspaceAttentionStatus::Review, true))
+        );
+        assert_eq!(
+            workspace_attention_reason_for_terminal_status(&TaskStatus::Failed, reason.clone()),
+            reason
+        );
+    }
+
+    #[test]
+    fn terminal_unregister_prefers_live_attention_workspace() {
+        let live_attention = LiveTerminalAttention {
+            workspace_id: "workspace-live".to_string(),
+            status: WorkspaceAttentionStatus::Working,
+        };
+
+        assert_eq!(
+            workspace_id_for_terminal_unregister(Some(&live_attention), Some("workspace-tracked")),
+            Some("workspace-live".to_string())
+        );
+    }
+
+    #[test]
+    fn terminal_unregister_falls_back_to_tracked_workspace_when_live_attention_is_missing() {
+        assert_eq!(
+            workspace_id_for_terminal_unregister(None, Some("workspace-tracked")),
+            Some("workspace-tracked".to_string())
+        );
+    }
+
+    #[test]
     fn render_preset_command_line_preserves_verbatim_shell_commands() {
         let command = r#"codex -c model_reasoning_summary="detailed" -c model_supports_reasoning_summaries=true"#;
 
@@ -6783,23 +7077,45 @@ mod tests {
     }
 
     #[test]
-    fn terminal_input_restores_working_when_permission_is_not_active() {
-        assert_eq!(
-            next_terminal_input_attention_status(None),
-            Some(WorkspaceAttentionStatus::Working)
-        );
-        assert_eq!(
-            next_terminal_input_attention_status(Some(&WorkspaceAttentionStatus::Working)),
-            Some(WorkspaceAttentionStatus::Working)
-        );
+    fn always_mode_shows_terminal_notifications_even_when_workspace_is_visible() {
+        assert!(should_show_terminal_notification_for_context(
+            TerminalAgentNotificationMode::Always,
+            true,
+            Some("workspace-1"),
+            "workspace-1",
+        ));
     }
 
     #[test]
-    fn terminal_input_preserves_permission_attention() {
-        assert_eq!(
-            next_terminal_input_attention_status(Some(&WorkspaceAttentionStatus::Permission)),
-            None
-        );
+    fn workspace_hidden_mode_preserves_existing_visibility_gate() {
+        assert!(!should_show_terminal_notification_for_context(
+            TerminalAgentNotificationMode::WorkspaceHidden,
+            true,
+            Some("workspace-1"),
+            "workspace-1",
+        ));
+        assert!(should_show_terminal_notification_for_context(
+            TerminalAgentNotificationMode::WorkspaceHidden,
+            true,
+            Some("workspace-2"),
+            "workspace-1",
+        ));
+    }
+
+    #[test]
+    fn app_background_mode_depends_only_on_active_window_state() {
+        assert!(!should_show_terminal_notification_for_context(
+            TerminalAgentNotificationMode::AppBackground,
+            true,
+            Some("workspace-1"),
+            "workspace-1",
+        ));
+        assert!(should_show_terminal_notification_for_context(
+            TerminalAgentNotificationMode::AppBackground,
+            false,
+            Some("workspace-1"),
+            "workspace-1",
+        ));
     }
 
     #[test]
@@ -6897,6 +7213,49 @@ mod tests {
                 ahead_commits: 0,
                 behind_commits: 0,
             })
+        );
+    }
+
+    #[test]
+    fn workspace_row_status_kind_hides_closed_workspaces_even_with_cached_git_summary() {
+        let mut workspace = workspace_entry(WorkspaceKind::Primary);
+        workspace.git_summary = Some(GitChangeSummary {
+            changed_files: 2,
+            added_lines: 8,
+            deleted_lines: 1,
+            ..GitChangeSummary::default()
+        });
+
+        assert_eq!(
+            workspace_row_status_kind(&workspace, false),
+            WorkspaceRowStatusKind::Hidden
+        );
+    }
+
+    #[test]
+    fn workspace_row_status_kind_shows_open_for_open_workspace_without_visual_git_summary() {
+        let mut workspace = workspace_entry(WorkspaceKind::Primary);
+        workspace.git_status = WorkspaceGitStatus::Unavailable;
+
+        assert_eq!(
+            workspace_row_status_kind(&workspace, true),
+            WorkspaceRowStatusKind::Open
+        );
+    }
+
+    #[test]
+    fn workspace_row_status_kind_shows_git_changes_for_open_workspace_with_changes() {
+        let mut workspace = workspace_entry(WorkspaceKind::Primary);
+        workspace.git_summary = Some(GitChangeSummary {
+            changed_files: 3,
+            added_lines: 12,
+            deleted_lines: 4,
+            ..GitChangeSummary::default()
+        });
+
+        assert_eq!(
+            workspace_row_status_kind(&workspace, true),
+            WorkspaceRowStatusKind::GitChanges
         );
     }
 
