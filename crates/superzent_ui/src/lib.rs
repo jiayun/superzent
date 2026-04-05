@@ -4223,7 +4223,7 @@ impl Render for SuperzentRightSidebar {
                             .child(div().flex_1()),
                     ),
             )
-            .child(div().size_full().child(content))
+            .child(div().flex_1().overflow_hidden().child(content))
     }
 }
 
