@@ -826,16 +826,13 @@ pub fn init(cx: &mut App) {
                     run_open_workspace_in_new_window(workspace, window, cx);
                 })
                 .register_action(|workspace, _: &workspace::CloseWindow, window, cx| {
-                    // When the active pane has no items, absorb the event
-                    // so Cmd+W does nothing instead of closing the window.
-                    if workspace.active_pane().read(cx).items_len() == 0 {
-                        return;
-                    }
-
                     let right_dock = workspace.right_dock().clone();
-                    if !right_dock.read(cx).is_open()
-                        || !right_dock.focus_handle(cx).contains_focused(window, cx)
-                    {
+                    if !right_dock.read(cx).is_open() {
+                        // When there are no tabs and the right dock is closed,
+                        // absorb Cmd+W so it does nothing instead of closing the window.
+                        if workspace.active_pane().read(cx).items_len() == 0 {
+                            return;
+                        }
                         cx.propagate();
                         return;
                     }
@@ -856,7 +853,9 @@ pub fn init(cx: &mut App) {
 
                     match panel.read(cx).tab {
                         RightSidebarTab::Changes | RightSidebarTab::Files => {
-                            window.dispatch_action(Box::new(CloseFromRightSidebar), cx);
+                            if workspace.active_pane().read(cx).items_len() > 0 {
+                                window.dispatch_action(Box::new(CloseFromRightSidebar), cx);
+                            }
                         }
                         RightSidebarTab::Panel(_) => {
                             window.dispatch_action(Box::new(workspace::CloseActiveDock), cx);

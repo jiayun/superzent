@@ -5228,6 +5228,7 @@ mod tests {
             .unwrap()
     }
 
+    #[cfg(target_os = "macos")]
     fn right_dock_open(window: WindowHandle<MultiWorkspace>, cx: &TestAppContext) -> bool {
         window
             .read_with(cx, |multi_workspace, cx| {
@@ -5256,6 +5257,7 @@ mod tests {
             .unwrap()
     }
 
+    #[cfg(target_os = "macos")]
     fn active_center_pane_item_count(
         window: WindowHandle<MultiWorkspace>,
         cx: &TestAppContext,
@@ -5283,7 +5285,11 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     fn dispatch_close_window(window: WindowHandle<MultiWorkspace>, cx: &mut TestAppContext) {
-        cx.dispatch_action(window.into(), workspace::CloseWindow);
+        window
+            .update(cx, |_, window, cx| {
+                window.dispatch_action(Box::new(workspace::CloseWindow), cx);
+            })
+            .unwrap();
     }
 
     fn left_dock_open(window: WindowHandle<MultiWorkspace>, cx: &TestAppContext) -> bool {
