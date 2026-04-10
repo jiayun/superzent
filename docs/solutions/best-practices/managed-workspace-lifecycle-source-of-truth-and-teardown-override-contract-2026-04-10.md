@@ -15,7 +15,14 @@ symptoms:
   - Lifecycle defaults and workspace persistence were coupled across model, git, and UI layers
   - The create modal save toggle implied broader persistence than the actual one-shot setup contract
   - Delete confirmation could not reliably present the final teardown behavior up front
-tags: [managed-workspace-lifecycle, teardown-override, source-of-truth, delete-preview, workspace-persistence]
+tags:
+  [
+    managed-workspace-lifecycle,
+    teardown-override,
+    source-of-truth,
+    delete-preview,
+    workspace-persistence,
+  ]
 ---
 
 # Managed workspace lifecycle should keep repo config as the default and persist only teardown overrides
