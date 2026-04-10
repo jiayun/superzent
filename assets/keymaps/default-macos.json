@@ -754,7 +754,7 @@
     "context": "Workspace && right_dock == SuperzentRightSidebar",
     "use_key_equivalents": true,
     "bindings": {
-      "cmd-w": "superzent::CloseFromRightSidebar"
+      "cmd-w": "superzent::CloseCenterPaneItem"
     },
   },
   {

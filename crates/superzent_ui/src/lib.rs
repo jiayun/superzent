@@ -95,7 +95,7 @@ actions!(
         AddProject,
         NewWorkspace,
         RevealChanges,
-        CloseFromRightSidebar,
+        CloseCenterPaneItem,
         OpenWorkspaceInNewWindow,
         CloseWorkspace,
         DeleteWorkspace,
@@ -854,7 +854,7 @@ pub fn init(cx: &mut App) {
                     match panel.read(cx).tab {
                         RightSidebarTab::Changes | RightSidebarTab::Files => {
                             if workspace.active_pane().read(cx).items_len() > 0 {
-                                window.dispatch_action(Box::new(CloseFromRightSidebar), cx);
+                                window.dispatch_action(Box::new(CloseCenterPaneItem), cx);
                             }
                         }
                         RightSidebarTab::Panel(_) => {
@@ -865,7 +865,7 @@ pub fn init(cx: &mut App) {
                 .register_action(|workspace, _: &CloseWorkspace, window, cx| {
                     run_close_workspace(workspace, window, cx);
                 })
-                .register_action(|workspace, _: &CloseFromRightSidebar, window, cx| {
+                .register_action(|workspace, _: &CloseCenterPaneItem, window, cx| {
                     let Some(panel) = workspace.panel::<SuperzentRightSidebar>(cx) else {
                         return;
                     };
