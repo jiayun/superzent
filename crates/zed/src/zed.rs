@@ -5278,7 +5278,7 @@ mod tests {
     fn dispatch_right_sidebar_close(window: WindowHandle<MultiWorkspace>, cx: &mut TestAppContext) {
         window
             .update(cx, |_, window, cx| {
-                window.dispatch_action(Box::new(superzent_ui::CloseFromRightSidebar), cx);
+                window.dispatch_action(Box::new(superzent_ui::CloseCenterPaneItem), cx);
             })
             .unwrap();
     }

@@ -15,6 +15,19 @@ One window, multiple local workspaces with git worktree, fast file navigation, d
 - Compared with upstream Zed: more opinionated around managing multiple local projects and workspaces in one window, especially for git-worktree-heavy flows, with external ACP chats treated as a first-class center-pane workflow.
 - Compared with `superset.sh`: keeps a native editor in the loop, with language-server-backed navigation, diagnostics, and quick in-place edits alongside terminal agent workflows.
 
+## Keyboard Shortcuts
+
+Shortcuts that differ from upstream Zed:
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd+T` | Open terminal in center pane |
+| `Cmd+Shift+C` | Copy project-relative path |
+| `Ctrl+\` | Next workspace |
+| `Ctrl+\|` | Previous workspace |
+
+`Cmd+W` never closes the OS window — quit with `Cmd+Q` instead.
+
 ## Status
 
 This repository is in early alpha.

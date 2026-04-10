@@ -5115,8 +5115,8 @@ impl BackgroundScanner {
             match existing_repository_entry {
                 None => {
                     let Ok(relative) = dot_git_dir.strip_prefix(state.snapshot.abs_path()) else {
-                        log::warn!(
-                            "ignoring git directory outside the worktree root during repository refresh: {} (worktree root: {})",
+                        log::debug!(
+                            "skipping .git directory outside the worktree root during repository update: {} (worktree root: {})",
                             dot_git_dir.display(),
                             state.snapshot.abs_path().display()
                         );
@@ -5159,7 +5159,7 @@ impl BackgroundScanner {
 
             if exists_in_snapshot
                 || matches!(
-                    self.fs.metadata(&entry.common_dir_abs_path).await,
+                    self.fs.metadata(&entry.repository_dir_abs_path).await,
                     Ok(Some(_))
                 )
             {
