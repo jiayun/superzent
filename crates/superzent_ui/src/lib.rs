@@ -2944,7 +2944,7 @@ impl NewWorkspaceModal {
             setup_script_editor,
             teardown_script_editor,
             show_more_options: false,
-            save_teardown_script_as_repo_default: true,
+            save_teardown_script_as_repo_default: false,
             active_script_target: None,
             scroll_handle: ScrollHandle::new(),
             base_branch_notice: bootstrap.base_branch_notice.map(Into::into),
@@ -8713,6 +8713,21 @@ mod tests {
         assert_eq!(options.teardown_script, Some("echo teardown".to_string()));
         assert!(options.save_teardown_script_as_repo_default);
         assert_eq!(options.base_branch_override, Some("main".to_string()));
+    }
+
+    #[test]
+    fn new_workspace_create_options_keeps_repo_default_teardown_persistence_disabled_by_default() {
+        let options = new_workspace_create_options(
+            "feature/bootstrap".to_string(),
+            None,
+            Some(PathBuf::from("/tmp/repo")),
+            None,
+            None,
+            false,
+            false,
+        );
+
+        assert!(!options.save_teardown_script_as_repo_default);
     }
 
     #[test]
