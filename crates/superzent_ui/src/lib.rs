@@ -7702,9 +7702,6 @@ fn build_local_workspace_bundle(
     let WorkspaceLocation::Local { worktree_path } = &workspace_location else {
         return None;
     };
-    if !worktree_path.exists() {
-        return None;
-    }
 
     let project_handle = workspace.read(cx).project();
     let project = project_handle.read(cx);
