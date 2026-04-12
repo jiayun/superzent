@@ -9,13 +9,12 @@ pub struct PendingKeystrokeIndicator {
 
 impl PendingKeystrokeIndicator {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let subscription =
-            cx.observe_pending_input(window, |this: &mut Self, window, _cx| {
-                this.pending_keystrokes = window
-                    .pending_input_keystrokes()
-                    .map(|keystrokes| keystrokes.to_vec());
-                _cx.notify();
-            });
+        let subscription = cx.observe_pending_input(window, |this: &mut Self, window, _cx| {
+            this.pending_keystrokes = window
+                .pending_input_keystrokes()
+                .map(|keystrokes| keystrokes.to_vec());
+            _cx.notify();
+        });
 
         Self {
             pending_keystrokes: None,
@@ -86,11 +85,7 @@ impl Render for PendingKeystrokeIndicator {
         h_flex()
             .gap(DynamicSpacing::Base04.rems(cx))
             .children(keystrokes.iter().map(|ks| render_keystroke(ks)))
-            .child(
-                Label::new("…")
-                    .size(LabelSize::Small)
-                    .color(Color::Muted),
-            )
+            .child(Label::new("…").size(LabelSize::Small).color(Color::Muted))
             .into_any()
     }
 }
