@@ -431,7 +431,11 @@ impl TitleBar {
                             }),
                     ),
             )
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_mouse_down(MouseButton::Left, |event, _, cx| {
+                if event.click_count < 2 {
+                    cx.stop_propagation();
+                }
+            })
             .into_any_element()
     }
 
