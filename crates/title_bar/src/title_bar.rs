@@ -51,7 +51,7 @@ use update_version::UpdateVersion;
 use util::ResultExt;
 use workspace::{
     MultiWorkspace, ToggleRightDock, ToggleWorkspaceSidebar, ToggleWorktreeSecurity, Workspace,
-    notifications::NotifyResultExt,
+    dock::DockPosition, notifications::NotifyResultExt,
 };
 use zed_actions::OpenRemote;
 
@@ -426,8 +426,15 @@ impl TitleBar {
                                     )
                                 }
                             })
-                            .on_click(move |_, window, cx| {
-                                window.dispatch_action(Box::new(ToggleRightDock), cx);
+                            .on_click({
+                                let workspace = workspace.clone();
+                                move |_, window, cx| {
+                                    if let Some(workspace) = workspace.upgrade() {
+                                        workspace.update(cx, |workspace, cx| {
+                                            workspace.toggle_dock(DockPosition::Right, window, cx);
+                                        });
+                                    }
+                                }
                             }),
                     ),
             )
