@@ -20,10 +20,10 @@ use editor::{Editor, EditorEvent, actions::SelectAll};
 use git::repository::validate_worktree_directory;
 use git_ui::git_panel::GitPanel;
 use gpui::{
-    Action, Animation, AnimationExt, App, AsyncWindowContext, ClickEvent, DismissEvent, Entity,
-    EntityId, EventEmitter, FocusHandle, Focusable, MouseButton, MouseDownEvent, PathPromptOptions,
-    Point, PromptLevel, ScrollHandle, SharedString, Subscription, Task, WeakEntity, WindowHandle,
-    actions, anchored, deferred, px,
+    Action, Animation, AnimationExt, App, AsyncWindowContext, ClickEvent, ClipboardItem,
+    DismissEvent, Entity, EntityId, EventEmitter, FocusHandle, Focusable, MouseButton,
+    MouseDownEvent, PathPromptOptions, Point, PromptLevel, ScrollHandle, SharedString,
+    Subscription, Task, WeakEntity, WindowHandle, actions, anchored, deferred, px,
 };
 use menu;
 use notifications::status_toast::{StatusToast, ToastIcon};
@@ -4095,7 +4095,33 @@ impl SuperzentSidebar {
     ) {
         let entity = cx.entity();
         let context_menu = ContextMenu::build(window, cx, move |menu, _window, _cx| {
-            let mut menu = menu.entry("Rename Workspace", None, {
+            let mut menu = menu;
+
+            if let WorkspaceLocation::Local { worktree_path } = &workspace.location {
+                let reveal_path = worktree_path.clone();
+                menu = menu.entry(
+                    if cfg!(target_os = "macos") {
+                        "Reveal in Finder"
+                    } else if cfg!(target_os = "windows") {
+                        "Reveal in File Explorer"
+                    } else {
+                        "Reveal in File Manager"
+                    },
+                    None,
+                    move |_window, cx| cx.reveal_path(&reveal_path),
+                );
+
+                let copy_path = worktree_path.clone();
+                menu = menu.entry("Copy Path", None, move |_window, cx| {
+                    cx.write_to_clipboard(ClipboardItem::new_string(
+                        copy_path.to_string_lossy().into_owned(),
+                    ));
+                });
+
+                menu = menu.separator();
+            }
+
+            menu = menu.entry("Rename Workspace", None, {
                 let entity = entity.clone();
                 let workspace_id = workspace.id.clone();
                 move |window, cx| {
