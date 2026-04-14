@@ -426,14 +426,11 @@ impl TitleBar {
                                     )
                                 }
                             })
-                            .on_click({
-                                let workspace = workspace.clone();
-                                move |_, window, cx| {
-                                    if let Some(workspace) = workspace.upgrade() {
-                                        workspace.update(cx, |workspace, cx| {
-                                            workspace.toggle_dock(DockPosition::Right, window, cx);
-                                        });
-                                    }
+                            .on_click(move |_, window, cx| {
+                                if let Some(workspace) = workspace.upgrade() {
+                                    workspace.update(cx, |workspace, cx| {
+                                        workspace.toggle_dock(DockPosition::Right, window, cx);
+                                    });
                                 }
                             }),
                     ),
