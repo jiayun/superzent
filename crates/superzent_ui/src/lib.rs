@@ -3039,7 +3039,7 @@ impl NewWorkspaceModal {
             .items_center()
             .justify_between()
             .child(
-                Label::new(selected_label.clone())
+                Label::new(selected_label)
                     .size(LabelSize::Small)
                     .color(Color::Default),
             )
